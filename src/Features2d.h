@@ -11,6 +11,8 @@ public:
   static void Init(Local<Object> target);
 
   static NAN_METHOD(Similarity);
+  static NAN_METHOD(DetectAndCompute);
+  static NAN_METHOD(FilteredMatch);
 };
 
 #endif
