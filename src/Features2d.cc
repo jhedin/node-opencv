@@ -111,6 +111,9 @@ public:
       }
     }
 
+    // we can't make a homography matrix with less than 4 points
+    if(good_matches.size() < 4) {return;};
+
      //-- Localize the object
     std::vector<cv::Point2f> obj;
     std::vector<cv::Point2f> scene;
@@ -328,6 +331,9 @@ public:
 
     d_good = (double) good_matches_sum / (double) good_matches.size();
     n_good = good_matches.size();
+
+    // we can't make a homography matrix with less than 4 points
+    if(n_good < 4) {return;};
 
      //-- Localize the object
     std::vector<cv::Point2f> obj;
