@@ -247,17 +247,20 @@ public:
     }
 
     dissimilarity = (double) good_matches_sum / (double) good_matches.size();
+    goodMatches = good_matches.size();
+
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[2];
+    Local<Value> argv[3];
 
     argv[0] = Nan::Null();
     argv[1] = Nan::New<Number>(dissimilarity);
+    argv[2] = Nan::New<Number>(goodMatches);
 
-    callback->Call(2, argv);
+    callback->Call(3, argv);
   }
 
 private:
@@ -266,6 +269,7 @@ private:
   std::vector<cv::KeyPoint> keypoints2;
   cv::Mat descriptors2;
   double dissimilarity;
+  int goodMatches;
 };
 
 NAN_METHOD(Features::FilteredMatch) {
