@@ -326,6 +326,9 @@ public:
       }
     }
 
+    d_good = (double) good_matches_sum / (double) good_matches.size();
+    n_good = good_matches.size();
+
      //-- Localize the object
     std::vector<cv::Point2f> obj;
     std::vector<cv::Point2f> scene;
@@ -333,7 +336,7 @@ public:
     std::vector<cv::DMatch> h_matches;
     double h_matches_sum = 0.0;
 
-    for( size_t i = 0; i < good_matches.size(); i++ )
+    for( size_t i = 0; i < n_good; i++ )
     {
       //-- Get the keypoints from the good matches
       obj.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
@@ -353,8 +356,7 @@ public:
       }
     }
 
-    d_good = (double) good_matches_sum / (double) good_matches.size();
-    n_good = good_matches.size();
+    
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
 
@@ -413,10 +415,11 @@ NAN_METHOD(Features::FilteredMatch) {
       Nan::Get(key, Nan::New<String>("class_id").ToLocalChecked()).ToLocalChecked()->Uint32Value()
       ));  
   }
-  size = Nan::Get(keys1, Nan::New<String>("length").ToLocalChecked()).ToLocalChecked()->Uint32Value();
+
+  size = Nan::Get(keys2, Nan::New<String>("length").ToLocalChecked()).ToLocalChecked()->Uint32Value();
   for(int i = 0; i < size; i++) {
-    key =  Nan::Get(keys1, Nan::New<Number>(i)).ToLocalChecked().As<Object>();
-    keypoints1.push_back(cv::KeyPoint(
+    key =  Nan::Get(keys2, Nan::New<Number>(i)).ToLocalChecked().As<Object>();
+    keypoints2.push_back(cv::KeyPoint(
       Nan::Get(key, Nan::New<String>("pointx").ToLocalChecked()).ToLocalChecked()->Uint32Value(),
       Nan::Get(key, Nan::New<String>("pointy").ToLocalChecked()).ToLocalChecked()->Uint32Value(),
       Nan::Get(key, Nan::New<String>("size").ToLocalChecked()).ToLocalChecked()->Uint32Value(),
