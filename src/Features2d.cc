@@ -79,23 +79,34 @@ public:
     }
 
     dissimilarity = (double) good_matches_sum / (double) good_matches.size();
+    n = good_matches.size();
+    drawMatches(image1, keypoints1, image2, keypoints2, good_matches, img_matches);
+
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[2];
+    Local<Value> argv[4];
 
     argv[0] = Nan::Null();
     argv[1] = Nan::New<Number>(dissimilarity);
+    argv[2] = Nan::New<Number>(n);
 
-    callback->Call(2, argv);
+    Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
+    Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
+    img->mat = img_matches;
+    argv[3] = im_h;
+
+    callback->Call(4, argv);
   }
 
 private:
   cv::Mat image1;
   cv::Mat image2;
   double dissimilarity;
+  int n;
+  cv::Mat img_matches;
 };
 
 NAN_METHOD(Features::Similarity) {
