@@ -16,8 +16,9 @@ cv.readImage("../examples/files/car1.jpg", function(err, car1) {
 
     cv.DetectAndCompute(car1, function (err, results1){
     	cv.DetectAndCompute(car2, function (err, results2){
-    		cv.FilteredMatch(results1,results2,function(err, d){
+    		cv.FilteredMatch(results1,results2,function(err, d, n){
     			console.log('Dissimilarity: ', d);
+          console.log(n);
     		});
     	});
     });
