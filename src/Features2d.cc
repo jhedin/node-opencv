@@ -5,6 +5,36 @@
 
 #if ((CV_MAJOR_VERSION >= 2) && (CV_MINOR_VERSION >=4))
 
+bool niceHomography(cv::Mat H)
+{
+
+    const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
+    if (det < 0)
+    {  
+        return false;
+    }
+
+    const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
+    if (N1 > 4 || N1 < 0.1)
+    {
+        return false;
+    }
+
+    const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
+    if (N2 > 4 || N2 < 0.1)
+    {
+        return false;
+    }
+
+    const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
+    if (N3 > 0.002)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 void Features::Init(Local<Object> target) {
   Nan::HandleScope scope;
 
@@ -19,7 +49,10 @@ public:
       Nan::AsyncWorker(callback),
       image1(image1),
       image2(image2),
-      dissimilarity(0) {
+      d_good(0),
+      n_good(0),
+      d_h(0),
+      n_h(0) {
   }
 
   ~AsyncDetectSimilarity() {
@@ -78,34 +111,67 @@ public:
       }
     }
 
-    dissimilarity = (double) good_matches_sum / (double) good_matches.size();
-    n = good_matches.size();
-    drawMatches(image1, keypoints1, image2, keypoints2, good_matches, img_matches);
+     //-- Localize the object
+    std::vector<cv::Point2f> obj;
+    std::vector<cv::Point2f> scene;
+    cv::Mat mask;
+    std::vector<cv::DMatch> h_matches;
+    double h_matches_sum = 0.0;
 
+    for( size_t i = 0; i < good_matches.size(); i++ )
+    {
+      //-- Get the keypoints from the good matches
+      obj.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
+      scene.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+    }
+    cv::Mat H = findHomography( obj, scene, cv::RANSAC, 3, mask);
+
+    if(niceHomography(H)){
+      for (int i = 0; i < good_matches.size(); i++)
+      {
+          // Select only the inliers (mask entry set to 1)
+          if ((int)mask.at<uchar>(i, 0) == 1)
+          {
+              h_matches.push_back(good_matches[i]);
+              h_matches_sum += good_matches[i].distance;
+          }
+      }
+    }
+
+    d_good = (double) good_matches_sum / (double) good_matches.size();
+    n_good = good_matches.size();
+    d_h = (double) h_matches_sum / (double) h_matches.size();
+    n_h = h_matches.size();
+    drawMatches(image1, keypoints1, image2, keypoints2, h_matches, img_matches);
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[4];
+    Local<Value> argv[6];
 
     argv[0] = Nan::Null();
-    argv[1] = Nan::New<Number>(dissimilarity);
-    argv[2] = Nan::New<Number>(n);
 
     Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
     Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
     img->mat = img_matches;
-    argv[3] = im_h;
+    
+    argv[1] = im_h;
+    argv[2] = Nan::New<Number>(d_good);
+    argv[3] = Nan::New<Number>(n_good);
+    argv[4] = Nan::New<Number>(d_h);
+    argv[5] = Nan::New<Number>(n_h);
 
-    callback->Call(4, argv);
+    callback->Call(6, argv);
   }
 
 private:
   cv::Mat image1;
   cv::Mat image2;
-  double dissimilarity;
-  int n;
+  double d_good;
+  int n_good;
+  double d_h;
+  int n_h;
   cv::Mat img_matches;
 };
 
@@ -213,7 +279,10 @@ public:
       descriptors1(descriptors1),
       keypoints2(keypoints2),
       descriptors2(descriptors2),
-      dissimilarity(0) {
+      d_good(0),
+      n_good(0),
+      d_h(0),
+      n_h(0) {
   }
 
   ~AsyncFilteredMatch() {
@@ -257,21 +326,52 @@ public:
       }
     }
 
-    dissimilarity = (double) good_matches_sum / (double) good_matches.size();
-    goodMatches = good_matches.size();
+     //-- Localize the object
+    std::vector<cv::Point2f> obj;
+    std::vector<cv::Point2f> scene;
+    cv::Mat mask;
+    std::vector<cv::DMatch> h_matches;
+    double h_matches_sum = 0.0;
+
+    for( size_t i = 0; i < good_matches.size(); i++ )
+    {
+      //-- Get the keypoints from the good matches
+      obj.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
+      scene.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+    }
+    cv::Mat H = findHomography( obj, scene, cv::RANSAC, 3, mask);
+
+    if(niceHomography(H)){
+      for (int i = 0; i < good_matches.size(); i++)
+      {
+          // Select only the inliers (mask entry set to 1)
+          if ((int)mask.at<uchar>(i, 0) == 1)
+          {
+              h_matches.push_back(good_matches[i]);
+              h_matches_sum += good_matches[i].distance;
+          }
+      }
+    }
+
+    d_good = (double) good_matches_sum / (double) good_matches.size();
+    n_good = good_matches.size();
+    d_h = (double) h_matches_sum / (double) h_matches.size();
+    n_h = h_matches.size();
 
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[3];
+    Local<Value> argv[5];
 
     argv[0] = Nan::Null();
-    argv[1] = Nan::New<Number>(dissimilarity);
-    argv[2] = Nan::New<Number>(goodMatches);
+    argv[1] = Nan::New<Number>(d_good);
+    argv[2] = Nan::New<Number>(n_good);
+    argv[3] = Nan::New<Number>(d_h);
+    argv[4] = Nan::New<Number>(n_h);
 
-    callback->Call(3, argv);
+    callback->Call(5, argv);
   }
 
 private:
@@ -279,8 +379,10 @@ private:
   cv::Mat descriptors1;
   std::vector<cv::KeyPoint> keypoints2;
   cv::Mat descriptors2;
-  double dissimilarity;
-  int goodMatches;
+  double d_good;
+  int n_good;
+  double d_h;
+  int n_h;
 };
 
 NAN_METHOD(Features::FilteredMatch) {
