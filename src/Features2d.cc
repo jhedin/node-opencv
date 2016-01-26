@@ -41,6 +41,7 @@ void Features::Init(Local<Object> target) {
   Nan::SetMethod(target, "ImageSimilarity", Similarity);
   Nan::SetMethod(target, "DetectAndCompute", DetectAndCompute);
   Nan::SetMethod(target, "FilteredMatch", FilteredMatch);
+  Nan::SetMethod(target, "MaskText", MaskText);
 }
 
 class AsyncDetectSimilarity: public Nan::AsyncWorker {
@@ -191,8 +192,6 @@ NAN_METHOD(Features::Similarity) {
   Nan::AsyncQueueWorker( new AsyncDetectSimilarity(callback, image1, image2) );
   return;
 }
-
-
 
 class AsyncDetectAndCompute: public Nan::AsyncWorker {
 public:
@@ -445,6 +444,82 @@ NAN_METHOD(Features::FilteredMatch) {
   Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
 
   Nan::AsyncQueueWorker( new AsyncFilteredMatch(callback, keypoints1, descriptors1, keypoints2, descriptors2));
+  return;
+}
+
+
+
+class AsyncMaskText: public Nan::AsyncWorker {
+public:
+  AsyncMaskText(Nan::Callback *callback, cv::Mat image) :
+      Nan::AsyncWorker(callback),
+      image(image) {
+  }
+
+  ~AsyncMaskText() {
+  }
+
+  void Execute() {
+
+    using namespace cv;
+
+    Mat gray;
+    cvtColor(image, gray, CV_BGR2GRAY);
+
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(8,8));
+    dilate(gray, gray, kernel);                         //dilate to remove text and tables
+    threshold(gray, gray, 254, 255, THRESH_TOZERO);     //change white background to black
+    threshold(gray, gray, 0, 255, THRESH_BINARY_INV);   //invert binary image for easier processing
+
+    //try to fill images rectangles and remove noise
+    morphologyEx(gray, gray, MORPH_CLOSE, kernel);      
+    morphologyEx(gray, gray, MORPH_OPEN, kernel);
+
+    //find contours and approximate to squares
+    vector<vector<Point>> contours;
+    findContours(gray, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    vector<vector<Point>> squares(contours.size());
+    Mat mask(gray.rows, gray.cols, CV_8UC1, Scalar(0));
+    for (int j = 0; j < contours.size(); j++){
+        if (contourArea(contours[j]) > 2000){       //optionally filter noise (too small contours)
+            approxPolyDP(contours[j], squares[j], 50, true);
+            drawContours(mask, squares, j, Scalar(255), -1);
+        }
+    }
+
+    image.copyTo(final, mask);
+
+  }
+
+  void HandleOKCallback() {
+    Nan::HandleScope scope;
+
+    Local<Value> argv[2];
+    Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
+    Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
+    img->mat = final;
+
+    argv[0] = Nan::Null();
+    argv[1] = im_h;
+
+    callback->Call(2, argv);
+  }
+
+private:
+  cv::Mat image;
+  cv::Mat final;
+};
+
+NAN_METHOD(Features::MaskText) {
+  Nan::HandleScope scope;
+
+  REQ_FUN_ARG(1, cb);
+
+  cv::Mat image = Nan::ObjectWrap::Unwrap<Matrix>(info[0]->ToObject())->mat;
+
+  Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
+
+  Nan::AsyncQueueWorker( new AsyncMaskText(callback, image) );
   return;
 }
 

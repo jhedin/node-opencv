@@ -14,6 +14,7 @@ public:
   static NAN_METHOD(Similarity);
   static NAN_METHOD(DetectAndCompute);
   static NAN_METHOD(FilteredMatch);
+  static NAN_METHOD(MaskText);
 };
 
 #endif
