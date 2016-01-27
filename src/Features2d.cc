@@ -465,7 +465,7 @@ public:
     Mat gray;
     cvtColor(image, gray, CV_BGR2GRAY);
 
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(8,8));
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(5,5));
     dilate(gray, gray, kernel);                         //dilate to remove text and tables
     threshold(gray, gray, 254, 255, THRESH_TOZERO);     //change white background to black
     threshold(gray, gray, 0, 255, THRESH_BINARY_INV);   //invert binary image for easier processing
@@ -568,49 +568,18 @@ public:
         // ratio of non-zero pixels in the filled region
         double r = (double)countNonZero(maskROI)/(rect.width*rect.height);
 
-        if (r > .45 /* assume at least 45% of the area is filled if it contains text */
+        if (r > .60 /* assume at least 60% of the area is filled if it contains text */
             && 
             (rect.height > 8 && rect.width > 8) /* constraints on region size */
             /* these two conditions alone are not very robust. better to use something 
             like the number of significant peaks in a horizontal projection as a third condition */
             )
         {
-            rectangle(rgb, rect, Scalar(0, 255, 0), 2);
+            rectangle(rgb, rect, Scalar(0, 255, 0), CV_FILLED);
         }
     }
 
     final = rgb;
-
-
-
-
-    /*
-
-    Mat gray;
-    cvtColor(image, gray, CV_BGR2GRAY);
-
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(8,8));
-    dilate(gray, gray, kernel);                         //dilate to remove text and tables
-    threshold(gray, gray, 254, 255, THRESH_TOZERO);     //change white background to black
-    threshold(gray, gray, 0, 255, THRESH_BINARY_INV);   //invert binary image for easier processing
-
-    //try to fill images rectangles and remove noise
-    morphologyEx(gray, gray, MORPH_CLOSE, kernel);      
-    morphologyEx(gray, gray, MORPH_OPEN, kernel);
-
-    //find contours and approximate to squares
-    vector<vector<Point>> contours;
-    findContours(gray, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    vector<vector<Point>> squares(contours.size());
-    Mat mask(gray.rows, gray.cols, CV_8UC1, Scalar(0));
-    for (int j = 0; j < contours.size(); j++){
-        if (contourArea(contours[j]) > 2000){       //optionally filter noise (too smalli contours)
-            approxPolyDP(contours[j], squares[j], 50, true);
-            drawContours(mask, squares, j, Scalar(255), -1);
-        }
-    }
-
-    image.copyTo(final, mask);*/
 
   }
 
