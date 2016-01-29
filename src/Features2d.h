@@ -16,7 +16,6 @@ public:
   static NAN_METHOD(DetectAndCompute);
   static NAN_METHOD(FilteredMatch);
   static NAN_METHOD(MaskText);
-  static NAN_METHOD(MaskText2);
 };
 
 #endif

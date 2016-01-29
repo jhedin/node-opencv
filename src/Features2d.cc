@@ -42,7 +42,6 @@ void Features::Init(Local<Object> target) {
   Nan::SetMethod(target, "DetectAndCompute", DetectAndCompute);
   Nan::SetMethod(target, "FilteredMatch", FilteredMatch);
   Nan::SetMethod(target, "MaskText", MaskText);
-  Nan::SetMethod(target, "MaskText2", MaskText2);
 }
 
 class AsyncDetectSimilarity: public Nan::AsyncWorker {
@@ -113,8 +112,14 @@ public:
       }
     }
 
+    d_good = (double) good_matches_sum / (double) good_matches.size();
+    n_good = good_matches.size();
+
     // we can't make a homography matrix with less than 4 points
-    if(good_matches.size() < 4) {return;};
+    if(good_matches.size() < 4) {
+      drawMatches(image1, keypoints1, image2, keypoints2, good_matches, img_matches);
+      return;
+    };
 
      //-- Localize the object
     std::vector<cv::Point2f> obj;
@@ -143,11 +148,9 @@ public:
       }
     }
 
-    d_good = (double) good_matches_sum / (double) good_matches.size();
-    n_good = good_matches.size();
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
-    drawMatches(image1, keypoints1, image2, keypoints2, h_matches, img_matches);
+    drawMatches(image1, keypoints1, image2, keypoints2, good_matches, img_matches);
   }
 
   void HandleOKCallback() {
@@ -361,7 +364,6 @@ public:
           }
       }
     }
-
     
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
@@ -448,6 +450,7 @@ NAN_METHOD(Features::FilteredMatch) {
   return;
 }
 
+
 class AsyncMaskText: public Nan::AsyncWorker {
 public:
   AsyncMaskText(Nan::Callback *callback, cv::Mat image) :
@@ -462,31 +465,53 @@ public:
 
     using namespace cv;
 
-    Mat gray;
-    cvtColor(image, gray, CV_BGR2GRAY);
-
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(5,5));
-    dilate(gray, gray, kernel);                         //dilate to remove text and tables
-    threshold(gray, gray, 254, 255, THRESH_TOZERO);     //change white background to black
-    threshold(gray, gray, 0, 255, THRESH_BINARY_INV);   //invert binary image for easier processing
-
-    //try to fill images rectangles and remove noise
-    morphologyEx(gray, gray, MORPH_CLOSE, kernel);      
-    morphologyEx(gray, gray, MORPH_OPEN, kernel);
-
-    //find contours and approximate to squares
+    Mat smalli;
+    // downsample and use it for processing
+    //pyrDown(image, rgb);
+    cvtColor(image, smalli, CV_BGR2GRAY);
+    // morphological gradient
+    Mat grad;
+    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(2, 2));
+    morphologyEx(smalli, grad, MORPH_GRADIENT, morphKernel);
+    // binarize
+    Mat bw;
+    threshold(grad, bw, 0.0, 255.0, THRESH_BINARY | THRESH_OTSU);
+    // connect horizontally oriented regions
+    Mat connected;
+    morphKernel = getStructuringElement(MORPH_RECT, Size(3, 1));
+    morphologyEx(bw, connected, MORPH_CLOSE, morphKernel);
+    // find contours
+    Mat mask = Mat::zeros(bw.size(), CV_8UC1);
     vector<vector<Point>> contours;
-    findContours(gray, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    vector<vector<Point>> squares(contours.size());
-    Mat mask(gray.rows, gray.cols, CV_8UC1, Scalar(0));
-    for (int j = 0; j < contours.size(); j++){
-        if (contourArea(contours[j]) > 2000){       //optionally filter noise (too smalli contours)
-            approxPolyDP(contours[j], squares[j], 50, true);
-            drawContours(mask, squares, j, Scalar(255), -1);
+    vector<Vec4i> hierarchy;
+    findContours(connected, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    // filter contours
+    for(int idx = 0; idx >= 0; idx = hierarchy[idx][0])
+    {
+        Rect rect = boundingRect(contours[idx]);
+        Mat maskROI(mask, rect);
+        maskROI = Scalar(0, 0, 0);
+        // fill the contour
+        drawContours(mask, contours, idx, Scalar(255, 255, 255), CV_FILLED);
+        // ratio of non-zero pixels in the filled region
+        double r = (double)countNonZero(maskROI)/(rect.width*rect.height);
+
+        if (r > .40 /* assume at least 40% of the area is filled if it contains text */
+            && 
+            (rect.height > 8 && rect.width > 8) /* constraints on region size */
+            /* these two conditions alone are not very robust. better to use something 
+            like the number of significant peaks in a horizontal projection as a third condition */
+            &&
+            ((double)rect.height / (double) image.rows < 0.20 )
+            )
+        {
+            // find out what color to paint
+
+            rectangle(image, rect, mean(image(rect)), CV_FILLED);
         }
     }
 
-    image.copyTo(final, mask);
+    final = image;
 
   }
 
@@ -519,99 +544,6 @@ NAN_METHOD(Features::MaskText) {
   Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
 
   Nan::AsyncQueueWorker( new AsyncMaskText(callback, image) );
-  return;
-}
-
-class AsyncMaskText2: public Nan::AsyncWorker {
-public:
-  AsyncMaskText2(Nan::Callback *callback, cv::Mat image) :
-      Nan::AsyncWorker(callback),
-      image(image) {
-  }
-
-  ~AsyncMaskText2() {
-  }
-
-  void Execute() {
-
-    using namespace cv;
-
-    Mat rgb;
-    Mat smalli;
-    // downsample and use it for processing
-    pyrDown(image, rgb);
-    cvtColor(rgb, smalli, CV_BGR2GRAY);
-    // morphological gradient
-    Mat grad;
-    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    morphologyEx(smalli, grad, MORPH_GRADIENT, morphKernel);
-    // binarize
-    Mat bw;
-    threshold(grad, bw, 0.0, 255.0, THRESH_BINARY | THRESH_OTSU);
-    // connect horizontally oriented regions
-    Mat connected;
-    morphKernel = getStructuringElement(MORPH_RECT, Size(9, 1));
-    morphologyEx(bw, connected, MORPH_CLOSE, morphKernel);
-    // find contours
-    Mat mask = Mat::zeros(bw.size(), CV_8UC1);
-    vector<vector<Point>> contours;
-    vector<Vec4i> hierarchy;
-    findContours(connected, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-    // filter contours
-    for(int idx = 0; idx >= 0; idx = hierarchy[idx][0])
-    {
-        Rect rect = boundingRect(contours[idx]);
-        Mat maskROI(mask, rect);
-        maskROI = Scalar(0, 0, 0);
-        // fill the contour
-        drawContours(mask, contours, idx, Scalar(255, 255, 255), CV_FILLED);
-        // ratio of non-zero pixels in the filled region
-        double r = (double)countNonZero(maskROI)/(rect.width*rect.height);
-
-        if (r > .60 /* assume at least 60% of the area is filled if it contains text */
-            && 
-            (rect.height > 8 && rect.width > 8) /* constraints on region size */
-            /* these two conditions alone are not very robust. better to use something 
-            like the number of significant peaks in a horizontal projection as a third condition */
-            )
-        {
-            rectangle(rgb, rect, Scalar(0, 255, 0), CV_FILLED);
-        }
-    }
-
-    final = rgb;
-
-  }
-
-  void HandleOKCallback() {
-    Nan::HandleScope scope;
-
-    Local<Value> argv[2];
-    Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
-    Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
-    img->mat = final;
-
-    argv[0] = Nan::Null();
-    argv[1] = im_h;
-
-    callback->Call(2, argv);
-  }
-
-private:
-  cv::Mat image;
-  cv::Mat final;
-};
-
-NAN_METHOD(Features::MaskText2) {
-  Nan::HandleScope scope;
-
-  REQ_FUN_ARG(1, cb);
-
-  cv::Mat image = Nan::ObjectWrap::Unwrap<Matrix>(info[0]->ToObject())->mat;
-
-  Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
-
-  Nan::AsyncQueueWorker( new AsyncMaskText2(callback, image) );
   return;
 }
 
