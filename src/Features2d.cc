@@ -53,7 +53,8 @@ public:
       d_good(0),
       n_good(0),
       d_h(0),
-      n_h(0) {
+      n_h(0),
+      condition(0) {
   }
 
   ~AsyncDetectSimilarity() {
@@ -150,13 +151,18 @@ public:
 
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
-    drawMatches(image1, keypoints1, image2, keypoints2, good_matches, img_matches);
+    drawMatches(image1, keypoints1, image2, keypoints2, h_matches, img_matches);
+
+    cv::Mat w;
+    cv::SVD::compute(H,w);
+    condition = ((double*)w.data)[H.cols-1]/((double*)w.data)[0];
+
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[6];
+    Local<Value> argv[7];
 
     argv[0] = Nan::Null();
 
@@ -169,8 +175,9 @@ public:
     argv[3] = Nan::New<Number>(n_good);
     argv[4] = Nan::New<Number>(d_h);
     argv[5] = Nan::New<Number>(n_h);
+    argv[6] = Nan::New<Number>(condition);
 
-    callback->Call(6, argv);
+    callback->Call(7, argv);
   }
 
 private:
@@ -181,6 +188,7 @@ private:
   double d_h;
   int n_h;
   cv::Mat img_matches;
+  double condition;
 };
 
 NAN_METHOD(Features::Similarity) {
@@ -288,7 +296,8 @@ public:
       d_good(0),
       n_good(0),
       d_h(0),
-      n_h(0) {
+      n_h(0),
+      condition(0) {
   }
 
   ~AsyncFilteredMatch() {
@@ -368,20 +377,25 @@ public:
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
 
+    cv::Mat w;
+    cv::SVD::compute(H,w);
+    condition = ((double*)w.data)[H.cols-1]/((double*)w.data)[0];
+
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[5];
+    Local<Value> argv[6];
 
     argv[0] = Nan::Null();
     argv[1] = Nan::New<Number>(d_good);
     argv[2] = Nan::New<Number>(n_good);
     argv[3] = Nan::New<Number>(d_h);
     argv[4] = Nan::New<Number>(n_h);
+    argv[5] = Nan::New<Number>(condition);
 
-    callback->Call(5, argv);
+    callback->Call(6, argv);
   }
 
 private:
@@ -393,6 +407,7 @@ private:
   int n_good;
   double d_h;
   int n_h;
+  double condition;
 };
 
 NAN_METHOD(Features::FilteredMatch) {
