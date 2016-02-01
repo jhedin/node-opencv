@@ -486,14 +486,14 @@ public:
     cvtColor(image, smalli, CV_BGR2GRAY);
     // morphological gradient
     Mat grad;
-    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(2, 2));
+    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
     morphologyEx(smalli, grad, MORPH_GRADIENT, morphKernel);
     // binarize
     Mat bw;
     threshold(grad, bw, 0.0, 255.0, THRESH_BINARY | THRESH_OTSU);
     // connect horizontally oriented regions
     Mat connected;
-    morphKernel = getStructuringElement(MORPH_RECT, Size(3, 1));
+    morphKernel = getStructuringElement(MORPH_RECT, Size(7, 2));
     morphologyEx(bw, connected, MORPH_CLOSE, morphKernel);
     // find contours
     Mat mask = Mat::zeros(bw.size(), CV_8UC1);
@@ -522,7 +522,44 @@ public:
         {
             // find out what color to paint
 
-            rectangle(image, rect, mean(image(rect)), CV_FILLED);
+          /// Separate the image in 3 places ( B, G and R )
+          Mat src = image(rect);
+          vector<cv::Mat> bgr_planes;
+          split( src, bgr_planes );
+
+          /// Establish the number of bins
+          int histSize = 256;
+
+          /// Set the ranges ( for B,G,R) )
+          float range[] = { 0, 256 } ;
+          const float* histRange = { range };
+
+          bool uniform = true; bool accumulate = false;
+
+          Mat b_hist, g_hist, r_hist;
+
+          /// Compute the histograms:
+          calcHist( &bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate );
+          calcHist( &bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate );
+          calcHist( &bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate );
+
+          int maxr = 0;
+          int maxg = 0;
+          int maxb = 0;
+
+          for(int i = 0; i < 256; i++){
+            if(r_hist.at<float>(i) > r_hist.at<float>(maxr)) {
+              maxr = i;
+            }
+            if(g_hist.at<float>(i) > g_hist.at<float>(maxg)) {
+              maxg = i;
+            }
+            if(b_hist.at<float>(i) > b_hist.at<float>(maxb)) {
+              maxb = i;
+            }
+          }
+
+          rectangle(image, rect, Scalar(maxb, maxg, maxr), CV_FILLED);
         }
     }
 
