@@ -6,6 +6,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/photo/photo.hpp>
 
 class Features: public Nan::ObjectWrap {
 public:
@@ -16,6 +17,7 @@ public:
   static NAN_METHOD(DetectAndCompute);
   static NAN_METHOD(FilteredMatch);
   static NAN_METHOD(MaskText);
+  static NAN_METHOD(DrawFeatures);
 };
 
 #endif
