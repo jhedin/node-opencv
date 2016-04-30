@@ -236,10 +236,10 @@ public:
     bilateralFilter(image1, blur1, 9, 75, 75);
     eqhist1 = equalizeIntensity(blur1);
     cvtColor( blur1, gray1, CV_BGR2GRAY );
-    threshold(gray1, mask1, 230.0, 255.0, THRESH_BINARY);
+    /*threshold(gray1, mask1, 230.0, 255.0, THRESH_BINARY);
     gray1.setTo(Scalar(255), mask1);
     equalizeHist( gray1, eqgray1);
-    bilateralFilter(eqgray1, blur1, 9, 75, 75);
+    bilateralFilter(eqgray1, blur1, 9, 75, 75);*/
    
 
     Mat blur2;
@@ -251,12 +251,13 @@ public:
     bilateralFilter(image2, blur2, 9, 75, 75);
     eqhist2 = equalizeIntensity(blur2);
     cvtColor( blur2, gray2, CV_BGR2GRAY );
-    threshold(gray2, mask2, 230.0, 255.0, THRESH_BINARY);
+    /*threshold(gray2, mask2, 230.0, 255.0, THRESH_BINARY);
     gray2.setTo(Scalar(255), mask2);
     equalizeHist( gray2, eqgray2);
-    bilateralFilter(eqgray2, blur2, 9, 75, 75);
+    bilateralFilter(eqgray2, blur2, 9, 75, 75);*/
     
-
+    blur1 = gray1;
+    blur2 = gray2;
     
     Ptr<FeatureDetector> detector = FeatureDetector::create("ORB");
     Ptr<DescriptorExtractor> extractor =
@@ -325,29 +326,33 @@ public:
     std::vector<DMatch> h_matches;
     double h_matches_sum = 0.0;
 
-    for( size_t i = 0; i < good_matches.size(); i++ )
+    for( size_t i = 0; i < matches.size(); i++ )
     {
       //-- Get the keypoints from the good matches
-      obj.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
-      scene.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+      obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
+      scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
     }
     Mat H = findHomography( obj, scene, RANSAC, 3, mask);
 
     if(niceHomography(H)){
-      for (int i = 0; i < good_matches.size(); i++)
+      for (int i = 0; i < matches.size(); i++)
       {
           // Select only the inliers (mask entry set to 1)
           if ((int)mask.at<uchar>(i, 0) == 1)
           {
-              h_matches.push_back(good_matches[i]);
-              h_matches_sum += good_matches[i].distance;
+              h_matches.push_back(matches[i]);
+              h_matches_sum += matches[i].distance;
           }
       }
     }
 
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
-    drawMatches(blur1, keypoints1, blur2, keypoints2, h_matches, img_matches);
+    if(n_h > 0){
+      drawMatches(blur1, keypoints1, blur2, keypoints2, h_matches, img_matches);
+    } else {
+      drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
+    }
 
     Mat w;
     SVD::compute(H,w);
