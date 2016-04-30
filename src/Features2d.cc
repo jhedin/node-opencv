@@ -2,6 +2,7 @@
 #include "Matrix.h"
 #include <nan.h>
 #include <stdio.h>
+#include <cmath>
 
 #if ((CV_MAJOR_VERSION >= 2) && (CV_MINOR_VERSION >=4))
 
@@ -215,11 +216,11 @@ public:
       Nan::AsyncWorker(callback),
       image1(image1),
       image2(image2),
-      d_good(0),
+      d_good(NAN),
       n_good(0),
-      d_h(0),
+      d_h(NAN),
       n_h(0),
-      condition(0) {
+      condition(NAN) {
   }
 
   ~AsyncDetectSimilarity() {
