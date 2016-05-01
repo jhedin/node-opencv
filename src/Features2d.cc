@@ -315,7 +315,7 @@ public:
     n_good = good_matches.size();
 
     // we can't make a homography matrix with less than 4 points
-    if(good_matches.size() < 4) {
+    if(matches.size() < 4) {
       drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
       return;
     };
@@ -333,7 +333,7 @@ public:
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
     }
-    Mat H = findHomography( obj, scene, RANSAC, 3, mask);
+    Mat H = findHomography( obj, scene, RANSAC, 5, mask);
 
     if(niceHomography(H)){
       for (int i = 0; i < matches.size(); i++)

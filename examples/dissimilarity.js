@@ -1,10 +1,24 @@
 var cv = require('../lib/opencv');
 
+var matches = [
+['t3_46bsxf.jpg', 't3_46bsia.jpg'],
+['t3_46brp9.jpg', 't3_46bro2.jpg'],
+['t3_46bqon.jpg', 't3_46bqnf.jpg'],
+['t3_46bsxf.jpg', 't3_46bsju.jpg'],
+['t3_46bpw7.jpg', 't3_46bpsy.jpg'],
+['t3_46bptz.jpg', 't3_46bpsy.jpg'],
+['t3_46bplz.jpg', 't3_46bpkw.jpg'],
+['t3_46bpcd.jpg', 't3_46bpbe.jpg'],
+['t3_46bpcd.jpg', 't3_46bpad.jpg'],
+['t3_46bpbe.jpg', 't3_46bpad.jpg']
+];
 
-cv.readImage("../examples/files/phrfypL.jpg", function(err, car1) {
+var comparison = matches[9];
+
+cv.readImage("../examples/files/"+comparison[0], function(err, car1) {
   if (err) throw err;
 
-  cv.readImage("../examples/files/jQQAdlv.jpg", function(err, car2) {
+  cv.readImage("../examples/files/"+comparison[1], function(err, car2) {
     if (err) throw err;
 
     cv.ImageSimilarity(car1, car2, function (err, img, d_g, n_g, d_h, n_h, cond) {
