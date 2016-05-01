@@ -13,7 +13,18 @@ var matches = [
 ['t3_46bpbe.jpg', 't3_46bpad.jpg']
 ];
 
-var comparison = matches[9];
+matches = [
+['t3_46bsxf.jpg', 't3_46bsju.jpg'],
+['t3_46bsxf.jpg', 't3_46bsia.jpg'],
+['t3_46brun.jpg', 't3_46bpbe.jpg'],
+['t3_46brun.jpg', 't3_46bpad.jpg'],
+['t3_46brp9.jpg', 't3_46bro2.jpg'],
+['t3_46bqon.jpg', 't3_46bqnf.jpg'],
+['t3_46bplz.jpg', 't3_46bpkw.jpg'],
+['t3_46bpcd.jpg', 't3_46bpad.jpg']
+];
+
+var comparison = matches[0];
 
 cv.readImage("../examples/files/"+comparison[0], function(err, car1) {
   if (err) throw err;

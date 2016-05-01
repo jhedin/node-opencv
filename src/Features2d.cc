@@ -35,24 +35,28 @@ bool niceHomography(Mat H)
 {
 
     const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
+    printf("det:%2.2lf", det);
     if (det < 0)
     {  
         return false;
     }
 
     const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
+    printf("N1:%2.2lf", N1);
     if (N1 > 4 || N1 < 0.1)
     {
         return false;
     }
 
     const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
+    printf("N2:%2.2lf", N2);
     if (N2 > 4 || N2 < 0.1)
     {
         return false;
     }
 
     const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
+    printf("N3:%2.2lf", N3);
     if (N3 > 0.002)
     {
         return false;
