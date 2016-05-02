@@ -33,30 +33,33 @@ Mat equalizeIntensity(const Mat& inputImage)
 
 bool niceHomography(Mat H)
 {
+    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(0, 0),H.at<double>(0, 1),H.at<double>(0, 2));
+    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(1, 0),H.at<double>(1, 1),H.at<double>(1, 2));
+    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(2, 0),H.at<double>(2, 1),H.at<double>(2, 2));
 
     const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
-    printf("det:%2.2lf", det);
+    printf("det:%2.2lf\n", det);
     if (det < 0)
     {  
         return false;
     }
 
     const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
-    printf("N1:%2.2lf", N1);
+    printf("N1:%2.2lf\n", N1);
     if (N1 > 4 || N1 < 0.1)
     {
         return false;
     }
 
     const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
-    printf("N2:%2.2lf", N2);
+    printf("N2:%2.2lf\n", N2);
     if (N2 > 4 || N2 < 0.1)
     {
         return false;
     }
 
     const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
-    printf("N3:%2.2lf", N3);
+    printf("N3:%2.2lf\n", N3);
     if (N3 > 0.002)
     {
         return false;
@@ -327,7 +330,7 @@ public:
      //-- Localize the object
     std::vector<Point2f> obj;
     std::vector<Point2f> scene;
-    Mat mask;
+    Mat hmask;
     std::vector<DMatch> h_matches;
     double h_matches_sum = 0.0;
 
@@ -337,18 +340,59 @@ public:
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
     }
-    Mat H = findHomography( obj, scene, RANSAC, 5, mask);
-
+    Mat H = findHomography( obj, scene, RANSAC, 5, hmask);
+    Mat R = estimateRigidTransform(obj, scene, false);
+    R.rsize(3);
+    niceHomography(R);
     if(niceHomography(H)){
       for (int i = 0; i < matches.size(); i++)
       {
           // Select only the inliers (mask entry set to 1)
-          if ((int)mask.at<uchar>(i, 0) == 1)
+          if ((int)hmask.at<uchar>(i, 0) == 1)
           {
               h_matches.push_back(matches[i]);
               h_matches_sum += matches[i].distance;
           }
       }
+    }
+    std::vector<Point2f> obj2;
+    std::vector<Point2f> scene2;
+    Mat hmask2;
+    std::vector<DMatch> h_matches2;
+    double h_matches_sum2 = 0.0;
+    Mat H2;
+    Mat R2;
+    if(good_matches.size() >= 4){
+      for( size_t i = 0; i < good_matches.size(); i++ )
+      {
+        //-- Get the keypoints from the good matches
+        obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
+        scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+      }
+      H2 = findHomography( obj2, scene2, RANSAC, 5, hmask2);
+      R2 = estimateRigidTransform(obj2, scene2, false);
+      R2.resize(3);
+      niceHomography(R2);
+      
+      if(niceHomography(H2)){
+        for (int i = 0; i < good_matches.size(); i++)
+        {
+            // Select only the inliers (mask entry set to 1)
+            if ((int)hmask2.at<uchar>(i, 0) == 1)
+            {
+                h_matches2.push_back(good_matches[i]);
+                h_matches_sum2 += good_matches[i].distance;
+            }
+        }
+      }
+      double d_h2 = (double) h_matches_sum / (double) h_matches.size();
+      double n_h2 = h_matches.size();
+      Mat w2;
+      SVD::compute(H2,w2);
+      double condition2 = ((double*)w2.data)[H2.cols-1]/((double*)w2.data)[0];
+      printf("dis: %2.1lf\n", d_h2);
+      printf("n: %2.1lf\n", n_h2);
+      printf("cond: %2.1lf\n", condition2);
     }
 
     d_h = (double) h_matches_sum / (double) h_matches.size();
