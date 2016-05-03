@@ -33,33 +33,34 @@ Mat equalizeIntensity(const Mat& inputImage)
 
 bool niceHomography(Mat H)
 {
-    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(0, 0),H.at<double>(0, 1),H.at<double>(0, 2));
-    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(1, 0),H.at<double>(1, 1),H.at<double>(1, 2));
-    printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(2, 0),H.at<double>(2, 1),H.at<double>(2, 2));
+    //printf("cols: %d, rows: %d\n", H.cols, H.rows);
+    //printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(0, 0),H.at<double>(0, 1),H.at<double>(0, 2));
+    //printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(1, 0),H.at<double>(1, 1),H.at<double>(1, 2));
+    //printf("%2.2lf %2.2lf %2.2lf\n",H.at<double>(2, 0),H.at<double>(2, 1),H.at<double>(2, 2));
 
     const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
-    printf("det:%2.2lf\n", det);
+    //printf("det:%2.2lf\n", det);
     if (det < 0)
     {  
         return false;
     }
 
     const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
-    printf("N1:%2.2lf\n", N1);
+    //printf("N1:%2.2lf\n", N1);
     if (N1 > 4 || N1 < 0.1)
     {
         return false;
     }
 
     const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
-    printf("N2:%2.2lf\n", N2);
+    //printf("N2:%2.2lf\n", N2);
     if (N2 > 4 || N2 < 0.1)
     {
         return false;
     }
 
     const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
-    printf("N3:%2.2lf\n", N3);
+    //printf("N3:%2.2lf\n", N3);
     if (N3 > 0.002)
     {
         return false;
@@ -219,15 +220,18 @@ void Features::Init(Local<Object> target) {
 
 class AsyncDetectSimilarity: public Nan::AsyncWorker {
 public:
-  AsyncDetectSimilarity(Nan::Callback *callback, Mat image1, Mat image2) :
+  AsyncDetectSimilarity(Nan::Callback *callback, Mat image1, Mat image2, int thresh) :
       Nan::AsyncWorker(callback),
       image1(image1),
       image2(image2),
+      thresh(thresh),
       d_good(NAN),
       n_good(0),
       d_h(NAN),
       n_h(0),
-      condition(NAN) {
+      condition(NAN),
+      d_p(NAN),
+      n_p(0) {
   }
 
   ~AsyncDetectSimilarity() {
@@ -242,13 +246,12 @@ public:
     Mat mask1;
 
     bilateralFilter(image1, blur1, 9, 75, 75);
-    eqhist1 = equalizeIntensity(blur1);
+    //eqhist1 = equalizeIntensity(image1);
     cvtColor( blur1, gray1, CV_BGR2GRAY );
     /*threshold(gray1, mask1, 230.0, 255.0, THRESH_BINARY);
     gray1.setTo(Scalar(255), mask1);
     equalizeHist( gray1, eqgray1);
     bilateralFilter(eqgray1, blur1, 9, 75, 75);*/
-   
 
     Mat blur2;
     Mat eqhist2;
@@ -257,7 +260,7 @@ public:
     Mat mask2;
 
     bilateralFilter(image2, blur2, 9, 75, 75);
-    eqhist2 = equalizeIntensity(blur2);
+    //eqhist2 = equalizeIntensity(image2);
     cvtColor( blur2, gray2, CV_BGR2GRAY );
     /*threshold(gray2, mask2, 230.0, 255.0, THRESH_BINARY);
     gray2.setTo(Scalar(255), mask2);
@@ -340,28 +343,46 @@ public:
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
     }
-    Mat H = findHomography( obj, scene, RANSAC, 5, hmask);
-    Mat R = estimateRigidTransform(obj, scene, false);
-    R.rsize(3);
-    niceHomography(R);
+    Mat H = findHomography( obj, scene, RANSAC, thresh, hmask);
     if(niceHomography(H)){
       for (int i = 0; i < matches.size(); i++)
       {
           // Select only the inliers (mask entry set to 1)
-          if ((int)hmask.at<uchar>(i, 0) == 1)
+          if ((int)hmask.at<uchar>(i, 0))
           {
               h_matches.push_back(matches[i]);
               h_matches_sum += matches[i].distance;
           }
       }
     }
+
+    std::vector<Point3f> objptx;
+    for( size_t i = 0; i < obj.size(); i++ ){
+      objptx.push_back(Point3f(obj[i].x,obj[i].y,0));
+    }
+    std::vector<int> inliers;
+    Mat rvec;
+    Mat tvec;
+    Mat camera = (Mat_<double>(3,3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
+    solvePnPRansac(objptx, scene, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
+    std::vector<DMatch> p_matches;
+    double p_matches_sum = 0.0;
+    for( size_t i = 0; i < inliers.size(); i++ ){
+      p_matches.push_back(matches[inliers[i]]);
+      p_matches_sum += matches[inliers[i]].distance;
+    }
+    n_p = inliers.size();
+    d_p = (double) p_matches_sum / (double) p_matches.size();
+
+    //printf("n_p: %d\n", n_p);
+    //printf("d_p: %2.1lf\n", d_p);
+
     std::vector<Point2f> obj2;
     std::vector<Point2f> scene2;
     Mat hmask2;
     std::vector<DMatch> h_matches2;
     double h_matches_sum2 = 0.0;
     Mat H2;
-    Mat R2;
     if(good_matches.size() >= 4){
       for( size_t i = 0; i < good_matches.size(); i++ )
       {
@@ -369,38 +390,40 @@ public:
         obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
         scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
       }
-      H2 = findHomography( obj2, scene2, RANSAC, 5, hmask2);
-      R2 = estimateRigidTransform(obj2, scene2, false);
-      R2.resize(3);
-      niceHomography(R2);
+      H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
       
       if(niceHomography(H2)){
         for (int i = 0; i < good_matches.size(); i++)
         {
             // Select only the inliers (mask entry set to 1)
-            if ((int)hmask2.at<uchar>(i, 0) == 1)
+            if ((int)hmask2.at<uchar>(i, 0))
             {
                 h_matches2.push_back(good_matches[i]);
                 h_matches_sum2 += good_matches[i].distance;
             }
         }
       }
-      double d_h2 = (double) h_matches_sum / (double) h_matches.size();
+      double d_h2 = (double) h_matches_sum2 / (double) h_matches2.size();
       double n_h2 = h_matches.size();
       Mat w2;
       SVD::compute(H2,w2);
       double condition2 = ((double*)w2.data)[H2.cols-1]/((double*)w2.data)[0];
-      printf("dis: %2.1lf\n", d_h2);
-      printf("n: %2.1lf\n", n_h2);
-      printf("cond: %2.1lf\n", condition2);
+      //printf("dis: %2.1lf\n", d_h2);
+      //printf("n: %2.1lf\n", n_h2);
+      //printf("cond: %2.1lf\n", condition2);
     }
 
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
-    if(n_h > 0){
-      drawMatches(blur1, keypoints1, blur2, keypoints2, h_matches, img_matches);
+
+    if(n_p > 0){
+       drawMatches(blur1, keypoints1, blur2, keypoints2, p_matches, img_matches);
     } else {
-      drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
+      if(n_h > 0){
+        drawMatches(blur1, keypoints1, blur2, keypoints2, h_matches, img_matches);
+      } else {
+        drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
+      }
     }
 
     Mat w;
@@ -412,7 +435,7 @@ public:
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[7];
+    Local<Value> argv[9];
 
     argv[0] = Nan::Null();
 
@@ -426,8 +449,10 @@ public:
     argv[4] = Nan::New<Number>(d_h);
     argv[5] = Nan::New<Number>(n_h);
     argv[6] = Nan::New<Number>(condition);
+    argv[7] = Nan::New<Number>(d_p);
+    argv[8] = Nan::New<Number>(n_p);
 
-    callback->Call(7, argv);
+    callback->Call(9, argv);
   }
 
 private:
@@ -439,19 +464,24 @@ private:
   int n_h;
   Mat img_matches;
   double condition;
+
+  double d_p;
+  int n_p;
+  int thresh;
 };
 
 NAN_METHOD(Features::Similarity) {
   Nan::HandleScope scope;
 
-  REQ_FUN_ARG(2, cb);
+  REQ_FUN_ARG(3, cb);
 
   Mat image1 = Nan::ObjectWrap::Unwrap<Matrix>(info[0]->ToObject())->mat;
   Mat image2 = Nan::ObjectWrap::Unwrap<Matrix>(info[1]->ToObject())->mat;
+  int thresh = (int) info[2]->NumberValue();
 
   Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
 
-  Nan::AsyncQueueWorker( new AsyncDetectSimilarity(callback, image1, image2) );
+  Nan::AsyncQueueWorker( new AsyncDetectSimilarity(callback, image1, image2, thresh) );
   return;
 }
 
@@ -466,6 +496,7 @@ public:
   }
 
   void Execute() {
+
 
     Mat blur;
     Mat eqhist;
@@ -884,9 +915,9 @@ public:
     morphologyEx(connectedsum, opensum, MORPH_OPEN, morphKernel);
 
 
-    //std::vector<Mat> v { gray2, h3, v3, eqhist, grad, gradeq, gradsum, bwsum, closesum, erodesum, connectedsum, opensum};
-    //final = makeCanvas(v,2500,3);
-    //return;
+    /*std::vector<Mat> v { gray2, h3, v3, eqhist, grad, gradeq, gradsum, bwsum, connectedsum, opensum};
+    final = makeCanvas(v,2500,3);
+    return;*/
 
     //final = open;
     //return;
