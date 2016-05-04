@@ -380,7 +380,7 @@ public:
     double h_matches_sum2 = 0.0;
     Mat H2;
     if(good_matches.size() >= 3){
-      printf("finding pnp\n");
+      //printf("finding pnp\n");
       for( size_t i = 0; i < good_matches.size(); i++ )
       {
         //-- Get the keypoints from the good matches
@@ -427,7 +427,7 @@ public:
     }
 
     if(n_p < 1){
-      printf("finding pnp again\n");
+      //printf("finding pnp again\n");
       objptx.clear();
       p_matches.clear();
       inliers.clear();
@@ -442,8 +442,8 @@ public:
       }
       n_p = inliers.size();
       d_p = (double) p_matches_sum / (double) p_matches.size();
-      printf("n_p: %d\n", n_p);
-      printf("d_p: %2.1lf\n", d_p);
+      //printf("n_p: %d\n", n_p);
+      //printf("d_p: %2.1lf\n", d_p);
 
     }
 
