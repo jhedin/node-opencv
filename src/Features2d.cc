@@ -239,6 +239,14 @@ public:
 
   void Execute() {
 
+    std::vector<int> inliers;
+    Mat rvec;
+    Mat tvec;
+    Mat camera = (Mat_<double>(3,3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
+    std::vector<DMatch> p_matches;
+    double p_matches_sum = 0.0;
+    std::vector<Point3f> objptx;
+
     Mat blur1;
     Mat eqhist1;
     Mat gray1;
@@ -269,6 +277,7 @@ public:
     
     blur1 = gray1;
     blur2 = gray2;
+    //printf("preprocessed\n");
     
     Ptr<FeatureDetector> detector = FeatureDetector::create("ORB");
     Ptr<DescriptorExtractor> extractor =
@@ -324,8 +333,10 @@ public:
     d_good = (double) good_matches_sum / (double) good_matches.size();
     n_good = good_matches.size();
 
+    //printf("good matches found\n");
+
     // we can't make a homography matrix with less than 4 points
-    if(matches.size() < 4) {
+    if(matches.size() < 3) {
       drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
       return;
     };
@@ -336,6 +347,7 @@ public:
     Mat hmask;
     std::vector<DMatch> h_matches;
     double h_matches_sum = 0.0;
+    Mat H;
 
     for( size_t i = 0; i < matches.size(); i++ )
     {
@@ -343,39 +355,23 @@ public:
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
     }
-    Mat H = findHomography( obj, scene, RANSAC, thresh, hmask);
-    if(niceHomography(H)){
-      for (int i = 0; i < matches.size(); i++)
-      {
-          // Select only the inliers (mask entry set to 1)
-          if ((int)hmask.at<uchar>(i, 0))
-          {
-              h_matches.push_back(matches[i]);
-              h_matches_sum += matches[i].distance;
-          }
+    if(matches.size() > 3){
+      H = findHomography( obj, scene, RANSAC, thresh, hmask);
+      if(niceHomography(H)){
+        for (int i = 0; i < matches.size(); i++)
+        {
+            // Select only the inliers (mask entry set to 1)
+            if ((int)hmask.at<uchar>(i, 0))
+            {
+                h_matches.push_back(matches[i]);
+                h_matches_sum += matches[i].distance;
+            }
+        }
       }
     }
+    
 
-    std::vector<Point3f> objptx;
-    for( size_t i = 0; i < obj.size(); i++ ){
-      objptx.push_back(Point3f(obj[i].x,obj[i].y,0));
-    }
-    std::vector<int> inliers;
-    Mat rvec;
-    Mat tvec;
-    Mat camera = (Mat_<double>(3,3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
-    solvePnPRansac(objptx, scene, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
-    std::vector<DMatch> p_matches;
-    double p_matches_sum = 0.0;
-    for( size_t i = 0; i < inliers.size(); i++ ){
-      p_matches.push_back(matches[inliers[i]]);
-      p_matches_sum += matches[inliers[i]].distance;
-    }
-    n_p = inliers.size();
-    d_p = (double) p_matches_sum / (double) p_matches.size();
-
-    //printf("n_p: %d\n", n_p);
-    //printf("d_p: %2.1lf\n", d_p);
+    //printf("first homography found\n");
 
     std::vector<Point2f> obj2;
     std::vector<Point2f> scene2;
@@ -383,14 +379,15 @@ public:
     std::vector<DMatch> h_matches2;
     double h_matches_sum2 = 0.0;
     Mat H2;
-    if(good_matches.size() >= 4){
+    if(good_matches.size() >= 3){
+      printf("finding pnp\n");
       for( size_t i = 0; i < good_matches.size(); i++ )
       {
         //-- Get the keypoints from the good matches
         obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
         scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
       }
-      H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
+      /*H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
       
       if(niceHomography(H2)){
         for (int i = 0; i < good_matches.size(); i++)
@@ -407,11 +404,50 @@ public:
       double n_h2 = h_matches.size();
       Mat w2;
       SVD::compute(H2,w2);
-      double condition2 = ((double*)w2.data)[H2.cols-1]/((double*)w2.data)[0];
+      double condition2 = ((double*)w2.data)[H2.cols-1]/((double*)w2.data)[0];*/
       //printf("dis: %2.1lf\n", d_h2);
       //printf("n: %2.1lf\n", n_h2);
       //printf("cond: %2.1lf\n", condition2);
+
+      
+      for( size_t i = 0; i < obj2.size(); i++ ){
+        objptx.push_back(Point3f(obj2[i].x,obj2[i].y,0));
+      }
+      solvePnPRansac(objptx, scene2, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
+      for( size_t i = 0; i < inliers.size(); i++ ){
+        p_matches.push_back(good_matches[inliers[i]]);
+        p_matches_sum += good_matches[inliers[i]].distance;
+      }
+      n_p = inliers.size();
+      d_p = (double) p_matches_sum / (double) p_matches.size();
+
+      //printf("n_p: %d\n", n_p);
+      //printf("d_p: %2.1lf\n", d_p);
+      //printf("pnp solved\n");
     }
+
+    if(n_p < 1){
+      printf("finding pnp again\n");
+      objptx.clear();
+      p_matches.clear();
+      inliers.clear();
+      p_matches_sum = 0;
+      for( size_t i = 0; i < obj.size(); i++ ){
+        objptx.push_back(Point3f(obj[i].x,obj[i].y,0));
+      }
+      solvePnPRansac(objptx, scene, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
+      for( size_t i = 0; i < inliers.size(); i++ ){
+        p_matches.push_back(matches[inliers[i]]);
+        p_matches_sum += matches[inliers[i]].distance;
+      }
+      n_p = inliers.size();
+      d_p = (double) p_matches_sum / (double) p_matches.size();
+      printf("n_p: %d\n", n_p);
+      printf("d_p: %2.1lf\n", d_p);
+
+    }
+
+
 
     d_h = (double) h_matches_sum / (double) h_matches.size();
     n_h = h_matches.size();
@@ -429,6 +465,7 @@ public:
     Mat w;
     SVD::compute(H,w);
     condition = ((double*)w.data)[H.cols-1]/((double*)w.data)[0];
+    //printf("end\n");
 
   }
 
@@ -763,7 +800,7 @@ NAN_METHOD(Features::FilteredMatch) {
 
 class AsyncMaskText: public Nan::AsyncWorker {
 public:
-  AsyncMaskText(Nan::Callback *callback, Mat image, int gradx, int grady, int connx, int conny, double filled, int boundx, int boundy, double heights, double thresh, int diax, int diay) :
+  AsyncMaskText(Nan::Callback *callback, Mat image, int gradx, int grady, int connx, int conny, double filled, int boundx, int boundy, double heights, double thresh, int diax, int diay, int boundadd, double lineThresh) :
       Nan::AsyncWorker(callback),
       gradx(gradx),
       grady(grady),
@@ -776,7 +813,9 @@ public:
       thresh(thresh),
       diax(diax),
       diay(diay),
-      image(image) {
+      image(image),
+      boundadd(boundadd),
+      lineThresh(lineThresh) {
   }
 
   ~AsyncMaskText() {
@@ -807,7 +846,6 @@ public:
     threshold(gray, nMask, 230.0, 255.0, THRESH_BINARY);
 
     gray.setTo(Scalar(255), nMask);
-
 
     Mat blur;
     bilateralFilter(gray, blur, 9, 75, 75);
@@ -871,27 +909,78 @@ public:
     morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(diax, diay));
     morphologyEx(connectedeq, openeq, MORPH_OPEN, morphKernel);
 
+    Mat gradsum;
+    addWeighted(grad,0.8,gradeq,0.3,0,gradsum,-1);
+
+    // remove lines
     Mat h2;
     Mat h3;
+    int minh = open.cols*heights < 200 ? (int) open.cols*heights : 200;
     // Create structure element for extracting horizontal lines through morphology operations
-    Mat horizontalStructure = getStructuringElement(MORPH_RECT, Size((int) open.cols/5,3));
+    Mat horizontalStructure = getStructuringElement(MORPH_RECT, Size(minh,3));
     // Apply morphology operations
     erode(bweq, h2, horizontalStructure, Point(-1, -1));
     dilate(h2, h3, horizontalStructure, Point(-1, -1));
 
     Mat v2;
     Mat v3;
+    int minv = open.rows*heights < 200 ? (int) open.rows*heights : 200;
     // Create structure element for extracting horizontal lines through morphology operations
-    Mat verticalStructure = getStructuringElement(MORPH_RECT, Size(3,(int) open.rows/5));
+    Mat verticalStructure = getStructuringElement(MORPH_RECT, Size(3,minv));
     // Apply morphology operations
     erode(bweq, v2, verticalStructure, Point(-1, -1));
     dilate(v2, v3, verticalStructure, Point(-1, -1));
 
-    Mat gradsum;
-    addWeighted(grad,0.8,gradeq,0.3,0,gradsum,-1);
+    // need to check that the lines aren't actually text.
+    // find contours
+    Mat h4 = h3.clone();
+    Mat v4 = v3.clone();
+    Mat linesGray = gray.clone();
+    vector<vector<Point>> lineContours;
+    vector<Vec4i> lineHierarchy;
+    findContours(h4, lineContours, lineHierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    //printf("found contours h, %d\n", lineContours.size());
+    // filter contours
+    if(lineContours.size()) {
+      for(int idx = 0; idx >= 0; idx = lineHierarchy[idx][0])
+      {
+          if(lineContours[idx].size() < 2) continue;
+          Rect rect = boundingRect(lineContours[idx]);
+          Mat roi(gray, rect);
+          Mat test;
+          cv::threshold(roi, test, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+          double r = (double)countNonZero(test)/(test.rows * test.cols);
+          //printf("r: %2.1lf %d %d\n ", r, countNonZero(test), (test.rows * test.cols));
+          if((r >= lineThresh || r <= 1.0 - lineThresh) && (r < 5.5 || r > 4.5)) {
+            //printf("found h line\n");
+            rectangle(gradsum, rect, Scalar(0,0,0), CV_FILLED);
+            rectangle(h3, rect, Scalar(50,50,50), CV_FILLED);
+          }   
+      }
+    }
+    //printf("found contours v, %d\n", lineContours.size());
+    findContours(v4, lineContours, lineHierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    // filter contours
+    if(lineContours.size()) {
+      for(int idx = 0; idx >= 0; idx = lineHierarchy[idx][0])
+      {
+          if(lineContours[idx].size() < 2) continue;
+          Rect rect = boundingRect(lineContours[idx]);
+          Mat roi(gray, rect);
+          Mat test;
+          cv::threshold(roi, test, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+          double r = (double)countNonZero(test)/(test.rows * test.cols);
+          //printf("r: %2.1lf %d %d\n ", r, countNonZero(test), (test.rows * test.cols));
+          if((r >= lineThresh || r <= 1.0 - lineThresh) && (r < 5.5 || r > 4.5)) {
+            //printf("found v line\n");
+            rectangle(gradsum, rect, Scalar(0,0,0), CV_FILLED);
+            rectangle(v3, rect, Scalar(50,50,50), CV_FILLED);
+          }   
+      }
+    }
+    //printf("lines removed\n");
 
-    gradsum.setTo(Scalar(0), h3);
-    gradsum.setTo(Scalar(0), v3);
+
 
     // need to ignore the brightest sections
     threshold(gradsum, nMask, thresh, 255.0, THRESH_BINARY_INV); 
@@ -914,15 +1003,15 @@ public:
     morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(diax, diay));
     morphologyEx(connectedsum, opensum, MORPH_OPEN, morphKernel);
 
-
-    /*std::vector<Mat> v { gray2, h3, v3, eqhist, grad, gradeq, gradsum, bwsum, connectedsum, opensum};
-    final = makeCanvas(v,2500,3);
-    return;*/
+    std::vector<Mat> v { gray2, h3, v3, eqhist, grad, gradeq, gradsum, bwsum, connectedsum, opensum, linesGray};
+    middle = makeCanvas(v,3000,3);
 
     //final = open;
     //return;
 
     connected = opensum;
+    //printf("done mask preprocess\n");
+
 
     // find contours
     Mat mask = Mat::zeros(bw.size(), CV_8UC1);
@@ -939,14 +1028,13 @@ public:
         drawContours(mask, contours, idx, Scalar(0, 0, 0), CV_FILLED);
         // ratio of non-zero pixels in the filled region
         double r = (double)countNonZero(maskROI)/(rect.width*rect.height);
-
         if (r < filled /* assume at least 40% of the area is filled if it contains text */
-            && 
-            (rect.height > boundy && rect.width > boundx) /* constraints on region size */
+            && (rect.height > boundy && rect.width > boundx) /* constraints on region size */
             /* these two conditions alone are not very robust. better to use something 
             like the number of significant peaks in a horizontal projection as a third condition */
-            &&
-            ((double)rect.height / (double) image.rows < heights )
+            && (rect.height > boundy + boundadd || rect.width > boundx + boundadd)
+            &&((double)rect.height / (double) image.rows < heights )
+            &&(rect.height < 110)
             )
         {
           // find out what color to paint
@@ -1002,26 +1090,32 @@ public:
     }
 
     final = image;
-
+    //printf("end mask\n");
   }
 
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[2];
+    Local<Value> argv[3];
     Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
     Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
     img->mat = final;
 
+    Local<Object> im_h2 = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
+    Matrix *img2 = Nan::ObjectWrap::Unwrap<Matrix>(im_h2);
+    img2->mat = middle;
+
     argv[0] = Nan::Null();
     argv[1] = im_h;
+    argv[2] = im_h2;
 
-    callback->Call(2, argv);
+    callback->Call(3, argv);
   }
 
 private:
   Mat image;
   Mat final;
+  Mat middle;
 
   int gradx;
   int grady;
@@ -1034,13 +1128,15 @@ private:
   double thresh;
   int diax;
   int diay;
+  int boundadd;
+  double lineThresh;
 
 };
 
 NAN_METHOD(Features::MaskText) {
   Nan::HandleScope scope;
 
-  REQ_FUN_ARG(12, cb);
+  REQ_FUN_ARG(14, cb);
 
   Mat image = Nan::ObjectWrap::Unwrap<Matrix>(info[0]->ToObject())->mat;
 
@@ -1055,10 +1151,12 @@ NAN_METHOD(Features::MaskText) {
   double thresh = info[9]->NumberValue();
   int diax = info[10]->NumberValue();
   int diay = info[11]->NumberValue();
+  int boundadd = info[12]->NumberValue();
+  double lineThresh = info[13]->NumberValue();
 
   Nan::Callback *callback = new Nan::Callback(cb.As<Function>());
 
-  Nan::AsyncQueueWorker( new AsyncMaskText(callback, image, gradx, grady, connx, conny, filled, boundx, boundy, heights, thresh, diax, diay));
+  Nan::AsyncQueueWorker( new AsyncMaskText(callback, image, gradx, grady, connx, conny, filled, boundx, boundy, heights, thresh, diax, diay, boundadd, lineThresh));
   return;
 }
 
@@ -1082,12 +1180,7 @@ public:
     Mat mask;
 
     bilateralFilter(image, blur, 9, 75, 75);
-    eqhist = equalizeIntensity(blur);
     cvtColor( blur, gray, CV_BGR2GRAY );
-    threshold(gray, mask, 230.0, 255.0, THRESH_BINARY);
-    gray.setTo(Scalar(255), mask);
-    equalizeHist( gray, eqgray);
-    bilateralFilter(eqgray, blur, 9, 75, 75);
 
     std::vector<KeyPoint> keypoints;
     Mat descriptors;
