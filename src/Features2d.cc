@@ -246,6 +246,7 @@ public:
     std::vector<DMatch> p_matches;
     double p_matches_sum = 0.0;
     std::vector<Point3f> objptx;
+    Mat rot;
 
     Mat blur1;
     Mat eqhist1;
@@ -342,8 +343,7 @@ public:
     };
 
      //-- Localize the object
-    std::vector<Point2f> obj;
-    std::vector<Point2f> scene;
+    
     Mat hmask;
     std::vector<DMatch> h_matches;
     double h_matches_sum = 0.0;
@@ -354,6 +354,7 @@ public:
       //-- Get the keypoints from the good matches
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
+      distance.push_back(matches[i].distance);
     }
     if(matches.size() > 3){
       H = findHomography( obj, scene, RANSAC, thresh, hmask);
@@ -373,8 +374,6 @@ public:
 
     //printf("first homography found\n");
 
-    std::vector<Point2f> obj2;
-    std::vector<Point2f> scene2;
     Mat hmask2;
     std::vector<DMatch> h_matches2;
     double h_matches_sum2 = 0.0;
@@ -386,6 +385,8 @@ public:
         //-- Get the keypoints from the good matches
         obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
         scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+        distance2.push_back(good_matches[i].distance);
+        printf("%2.1lf %2.1lf\n", good_matches[i].distance, distance2[i]);
       }
       /*H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
       
@@ -414,6 +415,10 @@ public:
         objptx.push_back(Point3f(obj2[i].x,obj2[i].y,0));
       }
       solvePnPRansac(objptx, scene2, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
+      Rodrigues(rvec, rot, noArray());
+      std::cout << "rot = " << std::endl << " "  << rot << std::endl << std::endl;
+      std::cout << "tvec = "<< std::endl << " "  << tvec << std::endl << std::endl;
+
       for( size_t i = 0; i < inliers.size(); i++ ){
         p_matches.push_back(good_matches[inliers[i]]);
         p_matches_sum += good_matches[inliers[i]].distance;
@@ -472,13 +477,57 @@ public:
   void HandleOKCallback() {
     Nan::HandleScope scope;
 
-    Local<Value> argv[9];
+    Local<Value> argv[11];
 
     argv[0] = Nan::Null();
 
     Local<Object> im_h = Nan::New(Matrix::constructor)->GetFunction()->NewInstance();
     Matrix *img = Nan::ObjectWrap::Unwrap<Matrix>(im_h);
     img->mat = img_matches;
+
+    Local<Object> match;
+    Local<Object> point1;
+    Local<Object> point2;
+
+    Local<Array> matches = Nan::New<Array>(obj.size()); 
+    for (int i = 0; i < obj.size(); i++) { 
+      match = Nan::New<Object>();
+      point1 = Nan::New<Object>();
+      point2 = Nan::New<Object>();
+
+      match->Set(Nan::New<v8::String>("point1").ToLocalChecked(), point1);
+      match->Set(Nan::New<v8::String>("point2").ToLocalChecked(), point2);
+
+      point1->Set(Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<Number>(obj[i].x));
+      point1->Set(Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<Number>(obj[i].y));
+
+      point2->Set(Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<Number>(scene[i].x));
+      point2->Set(Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<Number>(scene[i].y));
+
+      match->Set(Nan::New<v8::String>("d").ToLocalChecked(), Nan::New<Number>(distance[i]));
+
+      matches->Set(Nan::New<Number>(i), match); 
+    }
+
+    Local<Array> good_matches = Nan::New<Array>(obj2.size()); 
+    for (int i = 0; i < obj2.size(); i++) { 
+      match = Nan::New<Object>();
+      point1 = Nan::New<Object>();
+      point2 = Nan::New<Object>();
+
+      match->Set(Nan::New<v8::String>("point1").ToLocalChecked(), point1);
+      match->Set(Nan::New<v8::String>("point2").ToLocalChecked(), point2);
+
+      point1->Set(Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<Number>(obj2[i].x));
+      point1->Set(Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<Number>(obj2[i].y));
+
+      point2->Set(Nan::New<v8::String>("x").ToLocalChecked(), Nan::New<Number>(scene2[i].x));
+      point2->Set(Nan::New<v8::String>("y").ToLocalChecked(), Nan::New<Number>(scene2[i].y));
+
+      match->Set(Nan::New<v8::String>("d").ToLocalChecked(), Nan::New<Number>(distance2[i]));
+
+      good_matches->Set(Nan::New<Number>(i), match);
+    }
     
     argv[1] = im_h;
     argv[2] = Nan::New<Number>(d_good);
@@ -488,8 +537,11 @@ public:
     argv[6] = Nan::New<Number>(condition);
     argv[7] = Nan::New<Number>(d_p);
     argv[8] = Nan::New<Number>(n_p);
+    argv[9] = matches;
+    argv[10] = good_matches;
 
-    callback->Call(9, argv);
+
+    callback->Call(11, argv);
   }
 
 private:
@@ -505,6 +557,14 @@ private:
   double d_p;
   int n_p;
   int thresh;
+
+  std::vector<Point2f> obj;
+  std::vector<Point2f> scene;
+  std::vector<double> distance;
+
+  std::vector<Point2f> obj2;
+  std::vector<Point2f> scene2;
+  std::vector<double> distance2;
 };
 
 NAN_METHOD(Features::Similarity) {
