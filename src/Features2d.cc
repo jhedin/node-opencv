@@ -386,7 +386,7 @@ public:
         obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
         scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
         distance2.push_back(good_matches[i].distance);
-        printf("%2.1lf %2.1lf\n", good_matches[i].distance, distance2[i]);
+        //printf("%2.1lf %2.1lf\n", good_matches[i].distance, distance2[i]);
       }
       /*H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
       
@@ -416,8 +416,8 @@ public:
       }
       solvePnPRansac(objptx, scene2, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
       Rodrigues(rvec, rot, noArray());
-      std::cout << "rot = " << std::endl << " "  << rot << std::endl << std::endl;
-      std::cout << "tvec = "<< std::endl << " "  << tvec << std::endl << std::endl;
+      //std::cout << "rot = " << std::endl << " "  << rot << std::endl << std::endl;
+      //std::cout << "tvec = "<< std::endl << " "  << tvec << std::endl << std::endl;
 
       for( size_t i = 0; i < inliers.size(); i++ ){
         p_matches.push_back(good_matches[inliers[i]]);
