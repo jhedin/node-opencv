@@ -1143,7 +1143,7 @@ public:
 
           cvtColor(hsv, src, CV_HSV2BGR);
 
-          Scalar color = src.at<Vec3b>(0,0);
+          Scalar color = src.at<Scalar>(0,0);
 
           rectangle(image, rect, color, CV_FILLED);
         }
