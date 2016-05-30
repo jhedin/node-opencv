@@ -239,15 +239,6 @@ public:
 
   void Execute() {
 
-    std::vector<int> inliers;
-    Mat rvec;
-    Mat tvec;
-    Mat camera = (Mat_<double>(3,3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
-    std::vector<DMatch> p_matches;
-    double p_matches_sum = 0.0;
-    std::vector<Point3f> objptx;
-    Mat rot;
-
     Mat blur1;
     Mat eqhist1;
     Mat gray1;
@@ -286,7 +277,10 @@ public:
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(
         "BruteForce-Hamming");
 
+    std::vector<DMatch> matches12;
+    std::vector<DMatch> matches21;
     std::vector<DMatch> matches;
+    std::vector<DMatch> good_matches;
 
     Mat descriptors1 = Mat();
     Mat descriptors2 = Mat();
@@ -300,13 +294,23 @@ public:
     extractor->compute(blur1, keypoints1, descriptors1);
     extractor->compute(blur2, keypoints2, descriptors2);
 
-    matcher->match(descriptors1, descriptors2, matches);
+    matcher->match(descriptors1, descriptors2, matches12);
+    matcher->match(descriptors2, descriptors1, matches21);
+    
+    // cross check
+    for( size_t i = 0; i < matches12.size(); i++ )
+    { 
+        DMatch forward = matches12[i]; 
+        DMatch backward = matches21[forward.trainIdx];
+        if( backward.trainIdx == forward.queryIdx ) 
+            matches.push_back( forward ); 
+    }   
 
     double max_dist = 0;
     double min_dist = 100;
 
     //-- Quick calculation of max and min distances between keypoints
-    for (int i = 0; i < descriptors1.rows; i++) {
+    for (size_t i = 0; i < matches.size(); i++) {
       double dist = matches[i].distance;
       if (dist < min_dist) {
         min_dist = dist;
@@ -315,160 +319,37 @@ public:
         max_dist = dist;
       }
     }
-
-    // good matches should show up below 
-    std::vector<DMatch> good_matches;
+ 
     double good_matches_sum = 0.0;
 
-    for (int i = 0; i < descriptors1.rows; i++) {
+    for (size_t i = 0; i < matches.size(); i++) {
       double distance = matches[i].distance;
-      if (distance <= std::max(2 * min_dist, 64.0)) {
+      if (distance <= std::max(3 * min_dist, 0.02)) {
         good_matches.push_back(matches[i]);
         good_matches_sum += distance;
       }
     }
-
     d_good = (double) good_matches_sum / (double) good_matches.size();
     n_good = good_matches.size();
-
-    //printf("good matches found\n");
-
-    // we can't make a homography matrix with less than 4 points
-    if(matches.size() < 3) {
-      drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
-      return;
-    };
-
-     //-- Localize the object
     
-    Mat hmask;
-    std::vector<DMatch> h_matches;
-    double h_matches_sum = 0.0;
-    Mat H;
-
     for( size_t i = 0; i < matches.size(); i++ )
     {
       //-- Get the keypoints from the good matches
       obj.push_back( keypoints1[ matches[i].queryIdx ].pt );
       scene.push_back( keypoints2[ matches[i].trainIdx ].pt );
-      distance.push_back(matches[i].distance);
-    }
-    if(matches.size() > 3){
-      H = findHomography( obj, scene, RANSAC, thresh, hmask);
-      if(niceHomography(H)){
-        for (int i = 0; i < matches.size(); i++)
-        {
-            // Select only the inliers (mask entry set to 1)
-            if ((int)hmask.at<uchar>(i, 0))
-            {
-                h_matches.push_back(matches[i]);
-                h_matches_sum += matches[i].distance;
-            }
-        }
-      }
+      distance.push_back(matches[i].distance);     
     }
     
-
-    //printf("first homography found\n");
-
-    Mat hmask2;
-    std::vector<DMatch> h_matches2;
-    double h_matches_sum2 = 0.0;
-    Mat H2;
-    if(good_matches.size() >= 3){
-      //printf("finding pnp\n");
-      for( size_t i = 0; i < good_matches.size(); i++ )
-      {
-        //-- Get the keypoints from the good matches
-        obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
-        scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
-        distance2.push_back(good_matches[i].distance);
-        //printf("%2.1lf %2.1lf\n", good_matches[i].distance, distance2[i]);
-      }
-      /*H2 = findHomography( obj2, scene2, RANSAC, thresh, hmask2);
-      
-      if(niceHomography(H2)){
-        for (int i = 0; i < good_matches.size(); i++)
-        {
-            // Select only the inliers (mask entry set to 1)
-            if ((int)hmask2.at<uchar>(i, 0))
-            {
-                h_matches2.push_back(good_matches[i]);
-                h_matches_sum2 += good_matches[i].distance;
-            }
-        }
-      }
-      double d_h2 = (double) h_matches_sum2 / (double) h_matches2.size();
-      double n_h2 = h_matches.size();
-      Mat w2;
-      SVD::compute(H2,w2);
-      double condition2 = ((double*)w2.data)[H2.cols-1]/((double*)w2.data)[0];*/
-      //printf("dis: %2.1lf\n", d_h2);
-      //printf("n: %2.1lf\n", n_h2);
-      //printf("cond: %2.1lf\n", condition2);
-
-      
-      for( size_t i = 0; i < obj2.size(); i++ ){
-        objptx.push_back(Point3f(obj2[i].x,obj2[i].y,0));
-      }
-      solvePnPRansac(objptx, scene2, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
-      Rodrigues(rvec, rot, noArray());
-      //std::cout << "rot = " << std::endl << " "  << rot << std::endl << std::endl;
-      //std::cout << "tvec = "<< std::endl << " "  << tvec << std::endl << std::endl;
-
-      for( size_t i = 0; i < inliers.size(); i++ ){
-        p_matches.push_back(good_matches[inliers[i]]);
-        p_matches_sum += good_matches[inliers[i]].distance;
-      }
-      n_p = inliers.size();
-      d_p = (double) p_matches_sum / (double) p_matches.size();
-
-      //printf("n_p: %d\n", n_p);
-      //printf("d_p: %2.1lf\n", d_p);
-      //printf("pnp solved\n");
+    for( size_t i = 0; i < good_matches.size(); i++ )
+    {
+      //-- Get the keypoints from the good matches
+      obj2.push_back( keypoints1[ good_matches[i].queryIdx ].pt );
+      scene2.push_back( keypoints2[ good_matches[i].trainIdx ].pt );
+      distance2.push_back(good_matches[i].distance);
     }
-
-    if(n_p < 1){
-      //printf("finding pnp again\n");
-      objptx.clear();
-      p_matches.clear();
-      inliers.clear();
-      p_matches_sum = 0;
-      for( size_t i = 0; i < obj.size(); i++ ){
-        objptx.push_back(Point3f(obj[i].x,obj[i].y,0));
-      }
-      solvePnPRansac(objptx, scene, camera, Mat(), rvec, tvec, false, 100, thresh, 0.9, inliers, ITERATIVE);
-      for( size_t i = 0; i < inliers.size(); i++ ){
-        p_matches.push_back(matches[inliers[i]]);
-        p_matches_sum += matches[inliers[i]].distance;
-      }
-      n_p = inliers.size();
-      d_p = (double) p_matches_sum / (double) p_matches.size();
-      //printf("n_p: %d\n", n_p);
-      //printf("d_p: %2.1lf\n", d_p);
-
-    }
-
-
-
-    d_h = (double) h_matches_sum / (double) h_matches.size();
-    n_h = h_matches.size();
-
-    if(n_p > 0){
-       drawMatches(blur1, keypoints1, blur2, keypoints2, p_matches, img_matches);
-    } else {
-      if(n_h > 0){
-        drawMatches(blur1, keypoints1, blur2, keypoints2, h_matches, img_matches);
-      } else {
-        drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
-      }
-    }
-
-    Mat w;
-    SVD::compute(H,w);
-    condition = ((double*)w.data)[H.cols-1]/((double*)w.data)[0];
-    //printf("end\n");
-
+    
+    drawMatches(blur1, keypoints1, blur2, keypoints2, good_matches, img_matches);
+    
   }
 
   void HandleOKCallback() {
