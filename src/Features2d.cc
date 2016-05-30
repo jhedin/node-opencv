@@ -316,16 +316,13 @@ public:
       }
     }
 
-    //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
-    //-- or a smalli arbitary value ( 0.02 ) in the event that min_dist is very
-    //-- smalli)
-    //-- PS.- radiusMatch can also be used here.
+    // good matches should show up below 
     std::vector<DMatch> good_matches;
     double good_matches_sum = 0.0;
 
     for (int i = 0; i < descriptors1.rows; i++) {
       double distance = matches[i].distance;
-      if (distance <= std::max(2 * min_dist, 0.02)) {
+      if (distance <= std::max(2 * min_dist, 64.0)) {
         good_matches.push_back(matches[i]);
         good_matches_sum += distance;
       }
@@ -1128,7 +1125,7 @@ public:
           int maxv = 0;
 
           for(int i = 0; i < 256; i++){
-            if(h_hist.at<float>(i) > h_hist.at<float>(maxh)) {
+            if(i < 180 && h_hist.at<float>(i) > h_hist.at<float>(maxh)) {
               maxh = i;
             }
             if(s_hist.at<float>(i) > s_hist.at<float>(maxs)) {
@@ -1138,14 +1135,13 @@ public:
               maxv = i;
             }
           }
-          
-          hsv = Scalar(maxh, maxs, maxv);
+          Mat hsvpx(1,1, CV_8UC3, Scalar(maxh, maxs, maxv));
+          Mat bgrpx;
+          cvtColor(hsvpx, bgrpx, CV_HSV2BGR);
 
-          cvtColor(hsv, src, CV_HSV2BGR);
-
-          Scalar color = src.at<Scalar>(0,0);
-
-          rectangle(image, rect, color, CV_FILLED);
+          Vec3b color = bgrpx.at<Vec3b>(0,0);
+          //printf("%d %d %d | %d %d %d\n", maxh, maxs, maxv,color[0],color[1],color[2]);
+          rectangle(image, rect, Scalar(color[0],color[1],color[2]), CV_FILLED);
         }
     }
 

@@ -1,7 +1,10 @@
 'use strict'
 var cv = require('../lib/opencv');
+var ransac = require('node-ransac');
+var fit = require('./linear-fit-2d');
+var Promise = require('bluebird');
 
-var matches = [
+/*var matches = [
 ['t3_46bsxf.jpg', 't3_46bsia.jpg'],
 ['t3_46brp9.jpg', 't3_46bro2.jpg'],
 ['t3_46bqon.jpg', 't3_46bqnf.jpg'],
@@ -12,7 +15,7 @@ var matches = [
 ['t3_46bpcd.jpg', 't3_46bpbe.jpg'],
 ['t3_46bpcd.jpg', 't3_46bpad.jpg'],
 ['t3_46bpbe.jpg', 't3_46bpad.jpg']
-];
+];*/
 
 /*matches = ["t3_46bpuz.jpg","t3_46bptz.jpg"],
 ['t3_46bpw7.jpg', 't3_46bpsy.jpg'],
@@ -46,28 +49,18 @@ cv.readImage("../examples/files/"+comparison[0], function(err, car1) {
     //console.log("images read");
 
     cv.ImageSimilarity(car1, car2, 5, function (err, img, d_g, n_g, d_h, n_h, cond, d_p, n_p, matches, good_matches) {
-
-      if(good_matches.length >= 3) {
-        RobustLineFitting(good_matches, 3, function(){}, function(i, n, bestInliers, lastModel, model){
-          var dis = 0;
-          for(var inlier of bestInliers) {
-            dis += good_matches[inlier].d;
-          }
-          dis = dis / bestInliers.length;
-          console.log("good_text:", comparison[0], comparison[1], model.x.a/model.y.a  - 1, (model.x.a+model.y.a)/2,  bestInliers.length, dis, n);
-        });
-      }
-      RobustLineFitting(matches, 3, function(){}, function(i, n, bestInliers, lastModel, model){
-        var dis = 0;
-        for(var inlier of bestInliers) {
-          dis += matches[inlier].d;
-        }
-        dis = dis / bestInliers.length;
-        console.log("text:", comparison[0], comparison[1], model.x.a/model.y.a  - 1, (model.x.a+model.y.a)/2,  bestInliers.length, dis, n);
-      });
-      
       
       img.save("./"+comparison[0]+"_"+comparison[1]+"comparison.png");
+      
+      return Bluebird.props({
+        good: ransac(fit, good_matches, 3, 0.999, 0.3, 5),
+        all:  ransac(fit, matches,      3, 0.999, 0.7, 10)
+      }).then(function(res){
+        res.good.dis = res.good.inliers.reduce((a,b)=>{a+b.d},0) / res.good.inliers.length;
+        res.all.dis =  res.all.inliers.reduce((a,b)=>{a+b.d},0) / res.all.inliers.length;
+        console.log("text:", comparison[0], comparison[1], res.good.model.x.a/res.good.model.y.a  - 1, (res.good.model.x.a+res.good.model.y.a)/2, goodDissimilarity, res.all.model.x.a/res.all.model.y.a  - 1, (res.all.model.x.a+res.all.model.y.a)/2, allDissimilarity);
+      })
+      
     });
     cv.MaskText(car1,   5, 5, 2, 2, .55, 5, 5, .6, 190.0, 2, 2, 10, .5, function(err, masked1, mid1){
       cv.MaskText(car2, 5, 5, 2, 2, .55, 5, 5, .6, 190.0, 2, 2, 10, .5, function(err, masked2, mid2){
@@ -75,34 +68,17 @@ cv.readImage("../examples/files/"+comparison[0], function(err, car1) {
         cv.ImageSimilarity(masked1, masked2, 3, function (err, img, d_g, n_g, d_h, n_h, cond, d_p, n_p, matches, good_matches) {
           if (err) throw err;
           
-          /*for(var match of matches){
-            console.log(match);
-          }
-          for(var match of good_matches){
-            console.log(match);
-          }*/
-
-          if(good_matches.length >= 3) {
-            RobustLineFitting(good_matches, 3, function(){}, function(i, n, bestInliers, lastModel, model){
-              var dis = 0;
-              for(var inlier of bestInliers) {
-                dis += good_matches[inlier].d;
-              }
-              dis = dis / bestInliers.length;
-              console.log("good_mask:", comparison[0], comparison[1], model.x.a/model.y.a  - 1, (model.x.a+model.y.a)/2,  bestInliers.length, dis, n);
-            });
-          }
-          RobustLineFitting(matches, 3, function(){}, function(i, n, bestInliers, lastModel, model){
-            var dis = 0;
-            for(var inlier of bestInliers) {
-              dis += matches[inlier].d;
-            }
-            dis = dis / bestInliers.length;
-            console.log("mask:", comparison[0], comparison[1], model.x.a/model.y.a  - 1, (model.x.a+model.y.a)/2,  bestInliers.length, dis, n);
-          });
-          
-         
           img.save("./"+comparison[0]+"_"+comparison[1]+"comparison_masked.png");
+          
+          return Bluebird.props({
+            good: ransac(fit, good_matches, 3, 0.999, 0.3, 5),
+            all:  ransac(fit, matches,      3, 0.999, 0.7, 10)
+          }).then(function(res){
+            res.good.dis = res.good.inliers.reduce((a,b)=>{a+b.d},0) / res.good.inliers.length;
+            res.all.dis =  res.all.inliers.reduce((a,b)=>{a+b.d},0) / res.all.inliers.length;
+            console.log("text:", comparison[0], comparison[1], res.good.model.x.a/res.good.model.y.a  - 1, (res.good.model.x.a+res.good.model.y.a)/2, goodDissimilarity, res.all.model.x.a/res.all.model.y.a  - 1, (res.all.model.x.a+res.all.model.y.a)/2, allDissimilarity);
+          })
+          
 
           /*cv.DetectAndCompute(masked1, function (err, results1){
             cv.DetectAndCompute(masked2, function (err, results2){
@@ -121,487 +97,4 @@ cv.readImage("../examples/files/"+comparison[0], function(err, car1) {
   });
 
 });
-}
-
-// http://www.visual-experiments.com/demo/ransac.js/
-
-/*
-  Copyright (c) 2010 ASTRE Henri (http://www.visual-experiments.com)
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in
-  all copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-  THE SOFTWARE.
-*/
-
-function RobustLineFitting(points, threshold, onUpdate, onComplete) {
-  return new Ransac(new LineFitting(), points, threshold, onUpdate, onComplete);
-}
-
-function LineFitting() {
-
-  this.Model = function(xa,xb,ya,yb) {
-    this.x = {a: xa || 1, b: xb || 0};
-    this.y = {a: ya || 1, b: yb || 0};
-  }
-  this.Model.prototype.copy = function(model) {
-    this.x = {a: model.x.a, b: model.x.b};
-    this.y = {a: model.y.a, b: model.y.b};
-  }
-
-  this.selectSample = function * (n) {
-    var x0,x1,x2;
-    var res = {};
-    for(x0 = 0; x0 < n-2; x0++) {
-      for(x1 = x0+1; x1 < n-1; x1++) {
-        for(x2 = x1+1; x2 < n; x2++) {
-          res = {obj:{}, arr:{}};
-          res.obj[x0] = 1;
-          res.obj[x1] = 1;
-          res.obj[x2] = 1;
-          res.arr = [x0,x1,x2];
-          yield res;
-        }
-      }
-    }
-  }
-
-  this.nbSampleNeeded = 3;  
-  
-  this.estimateModel = function(points, sample, model) {
-    var inliers = [];
-    var counter = 0;
-    for (var i in sample) {
-      inliers.push(i);
-      _samplePoints[counter] = points[i]; 
-      counter++;
-    }
-    
-    /*var s1 = _samplePoints[0];
-    var s2 = _samplePoints[1];
-
-    model.x = {};
-    model.y = {};
-    
-    model.x.a = (s2.point2.x - s1.point2.x) / (s2.point1.x - s1.point1.x);
-    model.x.b = s1.point2.x - model.x.a * s1.point1.x;
-
-    model.y.a = (s2.point2.y - s1.point2.y) / (s2.point1.y - s1.point1.y);
-    model.y.b = s1.point2.y - model.y.a * s1.point1.y;*/
-
-    //var refined = {x:{},y:{}};
-    var Bx, By;
-    var preprocess = [];
-    var bar = {
-      point1: {
-        x:0,
-        y:0
-      },
-      point2: {
-        x:0,
-        y:0
-      }
-    }
-    var sum = {
-      point1:{x:0,y:0},
-      point2:{x:0,y:0},
-      point1point1:{x:0,y:0},
-      point2point2:{x:0,y:0},
-      point1point2:{x:0,y:0}
-    }
-    var n = inliers.length;
-
-    for(var inlier of inliers){
-      preprocess.push({
-        point1point1:{
-          x: points[inlier].point1.x * points[inlier].point1.x, 
-          y: points[inlier].point1.y * points[inlier].point1.y
-        },
-        point2point2:{
-          x: points[inlier].point2.x * points[inlier].point2.x, 
-          y: points[inlier].point2.y * points[inlier].point2.y
-        },
-        point1point2: {
-          x: points[inlier].point1.x * points[inlier].point2.x, 
-          y: points[inlier].point1.y * points[inlier].point2.y
-        }
-      });
-    }
-
-    for(var i = 0; i < n; i++) {
-      sum.point1.x += points[inlier].point1.x;
-      sum.point1.y += points[inlier].point1.y;
-
-      sum.point2.x += points[inlier].point2.x;
-      sum.point2.y += points[inlier].point2.y;
-
-      sum.point1point1.x += preprocess[i].point1point1.x;
-      sum.point1point1.y += preprocess[i].point1point1.y;
-
-      sum.point2point2.x += preprocess[i].point2point2.x;
-      sum.point2point2.y += preprocess[i].point2point2.y;
-      sum.point1point2.x += preprocess[i].point1point2.x;
-      sum.point1point2.y += preprocess[i].point1point2.y;
-    }
-
-    bar.point1.x = sum.point1.x / n;
-    bar.point1.y = sum.point1.y / n;
-
-    bar.point2.x = sum.point2.x / n;
-    bar.point2.y = sum.point2.y / n;
-    
-    // use the model slope t inform whether it's positive or negative
-    Bx = (1/2) * ((sum.point2.x - n * sum.point2point2.x)-(sum.point1.x - n * sum.point1point1.x))/(n*sum.point1.x*sum.point2.x - sum.point1point2.x);
-    /*if(model.x.a > 0) {
-      refined.x.a = -Bx + Math.sqrt(Bx*Bx + 1);
-    }
-    else {
-      refined.x.a = -Bx - Math.sqrt(Bx*Bx + 1);
-    }
-    refined.x.b = (sum.point2.x - refined.x.a * sum.point1.x) / n;*/
-
-    By = (1/2) * ((sum.point2.y - n * sum.point2point2.y)-(sum.point1.y - n * sum.point1point1.y))/(n*sum.point1.y*sum.point2.y - sum.point1point2.y);
-    /*if(model.y.a > 0) {
-      refined.y.a = -By + Math.sqrt(By*By + 1);
-    }
-    else {
-      refined.y.a = -By - Math.sqrt(By*By + 1);
-    }
-    refined.y.b = (sum.point2.y - refined.y.a * sum.point1.y) / n;*/
-
-
-    // try all 4 combinations to pick the one with the least sample errors
-    
-    var xap = -Bx + Math.sqrt(Bx*Bx + 1);
-    var xbp = (sum.point2.x - xap * sum.point1.x) / n;
-    var xam = -Bx - Math.sqrt(Bx*Bx + 1);
-    var xbm = (sum.point2.x - xam * sum.point1.x) / n;
-
-    var yap = -By + Math.sqrt(By*By + 1);
-    var ybp = (sum.point2.y - yap * sum.point1.y) / n;
-    var yam = -By - Math.sqrt(By*By + 1);
-    var ybm = (sum.point2.y - yam * sum.point1.y) / n;
-
-    var candidates = [
-    {
-      error: 0,
-      model:new this.Model(xap,xbp,yap,ybp)
-    }/*,
-    {
-      error: 0,
-      model:new this.Model(xap,xbp,yam,ybm)
-    },
-    {
-      error: 0,
-      model:new this.Model(xam,xbm,yap,ybp)
-    },
-    {
-      error: 0,
-      model:new this.Model(xam,xbm,yam,ybm)
-    }*/
-    ];
-
-    for(var candidate of candidates) {
-      for(var inlier of inliers){
-        candidate.error += this.estimateError(points, inlier, candidate.model);
-      }
-    }
-    candidates.sort(function(a,b){return a.error-b.error});
-
-    model.copy(candidates[0].model);
-
-  };
-  
-  this.estimateError = function(points, index, model) {
-
-    var dx = Math.abs(points[index].point2.x - model.x.a * points[index].point1.x - model.x.b) / Math.sqrt(1 + model.x.a * model.x.a);
-    var dy = Math.abs(points[index].point2.y - model.y.a * points[index].point1.y - model.y.b) / Math.sqrt(1 + model.y.a * model.y.a);
-
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  // refine the solution by perpendicular linear regression on the inliers
-  this.refine = function(points, inliers, model) {
-
-    //var refined = {x:{},y:{}};
-    var Bx, By;
-    var preprocess = [];
-    var bar = {
-      point1: {
-        x:0,
-        y:0
-      },
-      point2: {
-        x:0,
-        y:0
-      }
-    }
-    var sum = {
-      point1:{x:0,y:0},
-      point2:{x:0,y:0},
-      point1point1:{x:0,y:0},
-      point2point2:{x:0,y:0},
-      point1point2:{x:0,y:0}
-    }
-    var n = inliers.length;
-
-    for(var inlier of inliers){
-      preprocess.push({
-        point1point1:{
-          x: points[inlier].point1.x * points[inlier].point1.x, 
-          y: points[inlier].point1.y * points[inlier].point1.y
-        },
-        point2point2:{
-          x: points[inlier].point2.x * points[inlier].point2.x, 
-          y: points[inlier].point2.y * points[inlier].point2.y
-        },
-        point1point2: {
-          x: points[inlier].point1.x * points[inlier].point2.x, 
-          y: points[inlier].point1.y * points[inlier].point2.y
-        }
-      });
-    }
-
-    for(var i = 0; i < n; i++) {
-      sum.point1.x += points[inlier].point1.x;
-      sum.point1.y += points[inlier].point1.y;
-
-      sum.point2.x += points[inlier].point2.x;
-      sum.point2.y += points[inlier].point2.y;
-
-      sum.point1point1.x += preprocess[i].point1point1.x;
-      sum.point1point1.y += preprocess[i].point1point1.y;
-
-      sum.point2point2.x += preprocess[i].point2point2.x;
-      sum.point2point2.y += preprocess[i].point2point2.y;
-      sum.point1point2.x += preprocess[i].point1point2.x;
-      sum.point1point2.y += preprocess[i].point1point2.y;
-    }
-
-    bar.point1.x = sum.point1.x / n;
-    bar.point1.y = sum.point1.y / n;
-
-    bar.point2.x = sum.point2.x / n;
-    bar.point2.y = sum.point2.y / n;
-    
-    // use the model slope t inform whether it's positive or negative
-    Bx = (1/2) * ((sum.point2.x - n * sum.point2point2.x)-(sum.point1.x - n * sum.point1point1.x))/(n*sum.point1.x*sum.point2.x - sum.point1point2.x);
-    /*if(model.x.a > 0) {
-      refined.x.a = -Bx + Math.sqrt(Bx*Bx + 1);
-    }
-    else {
-      refined.x.a = -Bx - Math.sqrt(Bx*Bx + 1);
-    }
-    refined.x.b = (sum.point2.x - refined.x.a * sum.point1.x) / n;*/
-
-    By = (1/2) * ((sum.point2.y - n * sum.point2point2.y)-(sum.point1.y - n * sum.point1point1.y))/(n*sum.point1.y*sum.point2.y - sum.point1point2.y);
-    /*if(model.y.a > 0) {
-      refined.y.a = -By + Math.sqrt(By*By + 1);
-    }
-    else {
-      refined.y.a = -By - Math.sqrt(By*By + 1);
-    }
-    refined.y.b = (sum.point2.y - refined.y.a * sum.point1.y) / n;*/
-
-
-    // try all 4 combinations to pick the one with the least sample errors
-    
-    var xap = -Bx + Math.sqrt(Bx*Bx + 1);
-    var xbp = (sum.point2.x - xap * sum.point1.x) / n;
-    var xam = -Bx - Math.sqrt(Bx*Bx + 1);
-    var xbm = (sum.point2.x - xam * sum.point1.x) / n;
-
-    var yap = -By + Math.sqrt(By*By + 1);
-    var ybp = (sum.point2.y - yap * sum.point1.y) / n;
-    var yam = -By - Math.sqrt(By*By + 1);
-    var ybm = (sum.point2.y - yam * sum.point1.y) / n;
-
-    var candidates = [
-    {
-      error: 0,
-      model:new this.Model(xap,xbp,yap,ybp)
-    }/*,
-    {
-      error: 0,
-      model:new this.Model(xap,xbp,yam,ybm)
-    },
-    {
-      error: 0,
-      model:new this.Model(xam,xbm,yap,ybp)
-    },
-    {
-      error: 0,
-      model:new this.Model(xam,xbm,yam,ybm)
-    }*/
-    ];
-
-    for(var candidate of candidates) {
-      for(var inlier of inliers){
-        candidate.error += this.estimateError(points, inlier, candidate.model);
-      }
-    }
-    candidates.sort(function(a,b){return a.error-b.error});
-
-
-    return candidates[0].model;
-  }
-  
-  var _samplePoints = new Array(this.nbSampleNeeded);
-}
-
-function Ransac(fittingProblem, points, threshold, onUpdate, onComplete) {
-
-  var _points     = points;
-  var _threshold  = threshold;
-  var _onUpdate   = onUpdate;
-  var _onComplete = onComplete;
-  
-  //var _random      = new Random();
-  var _problem     = fittingProblem;  
-  var _bestModel   = new fittingProblem.Model();
-  var _bestInliers = [];
-  var _bestScore   = 4294967295;
-  
-  var _currentInliers = [];
-  var _currentModel   = new fittingProblem.Model();
-  var _nbIters        = nbIterations(0.9999, 0.9, fittingProblem.nbSampleNeeded);
-  var _sampleGenerator = fittingProblem.selectSample(points.length);
-
-  var _iterationCounter = 0;
-  var _iterationTimer;
-  var _that = this; 
-  var _combinations = new Set();
-  var _maxCombinations = _nCr(fittingProblem.nbSampleNeeded, _points.length);
-
-  function _nCr(k,n) {
-    var max = Math.max(k, n - k);
-    var result = 1;
-    for (var i = 1; i <= n - max; i++) {
-      result = result * (max + i) / i;
-    }
-
-    return result;
-  }
-  
-  function nbIterations(ransacProba, outlierRatio, sampleSize) {
-    return Math.ceil(Math.log(1-ransacProba) / Math.log(1-Math.pow(1-outlierRatio, sampleSize))) + _points.length;
-  }
-  
-  function randomInt(min, max) {
-    return Math.floor(Math.random()*(max - min + 1)) + min;
-    //return Math.floor(_random.uniform(min, max + 1));
-  }
-  
-  function randomSample(k, n, sample) {
-    var nbInserted = 0;
-    var sel = [];
-    while (nbInserted < k) {
-      var t = randomInt(0, n-1);
-      if (sample[t] === undefined) {
-        sample[t] = true;
-        sel.push(t);
-        nbInserted++;
-      }
-    }
-    return sel;
-  }
-  
-  this.stop = function() {
-    if (_iterationTimer) {
-      clearInterval(_iterationTimer);
-      _iterationTimer   = undefined;
-    }
-    _iterationCounter = 0;
-    _bestModel   = new fittingProblem.Model();
-    _bestInliers = [];
-    _bestScore   = 4294967295;
-  };
-  
-  this.next = function() {
-    _currentInliers.length = 0;
-    
-    var sample = {};
-    var sel = [];
-    var it;
-    while(1) {
-      sample = {}; 
-      if(_nbIters > _maxCombinations) {
-        it = _sampleGenerator.next();
-        if(it.done) {
-          sel = randomSample(_problem.nbSampleNeeded, _points.length, sample);
-        } else {
-          sample = it.value.obj;
-          sel = it.value.arr;
-        }  
-
-      } else {
-        sel = randomSample(_problem.nbSampleNeeded, _points.length, sample);
-      }
-      sel.sort(function(a,b){return a-b});
-      if(!_combinations.has(sel.toString())) {
-        break;
-      }
-      if(_combinations.size  >= _maxCombinations){
-        break;
-      }
-    }
-    _combinations.add(sel.toString());
-    
-    _problem.estimateModel(_points, sample, _currentModel);
-    
-    var score = 0;
-    for (var j=0; j<_points.length; ++j) {
-      var err = _problem.estimateError(_points, j, _currentModel);
-      if (err > _threshold) {
-        score += _threshold;
-      }
-      else {
-        score += err;
-        _currentInliers.push(j);
-      }
-    }
-    score = score / _points.length;
-    var aspectxy = _currentModel.x.a / _currentModel.y.a;
-    var aspectyx = _currentModel.y.a / _currentModel.x.a;
-    var aspect = aspectxy > aspectyx ? aspectxy : aspectyx;
-
-    score = score * aspect;
-
-    if (score < _bestScore) {
-      _bestModel.copy(_currentModel);
-      _bestInliers = _currentInliers.slice();
-      _bestScore   = score;
-      //console.log(_bestModel.x.a, _bestModel.y.a, _bestInliers.length, _bestScore);
-    }
-    
-    _onUpdate(_iterationCounter+1, _nbIters, _currentInliers, _currentModel, _bestModel);   
-    
-    _iterationCounter++;
-    if (_iterationCounter >= _nbIters || _iterationCounter >= _maxCombinations) {
-      //console.log(_bestModel.x.a, _bestModel.y.a, _bestInliers.length, _bestScore);
-      _onComplete(_iterationCounter, _nbIters, _bestInliers, _currentModel, fittingProblem.refine(_points, _bestInliers, _bestModel));
-      _that.stop();
-    }
-  };
-
-  if(_points.length  < fittingProblem.nbSampleNeeded) {
-      _onComplete(_iterationCounter, _nbIters, _bestInliers, _currentModel,_bestModel);
-    } else {
-      _that.stop();
-      _iterationTimer = setInterval(_that.next, 10);
-    }
-
 }
