@@ -14,10 +14,10 @@ public:
   static void Init(Local<Object> target);
 
   static NAN_METHOD(Similarity);
-  static NAN_METHOD(DetectAndCompute);
-  static NAN_METHOD(FilteredMatch);
-  static NAN_METHOD(MaskText);
+  static NAN_METHOD(DetectFeatures);
+  static NAN_METHOD(Match);
   static NAN_METHOD(DrawFeatures);
+  static NAN_METHOD(DrawMatches);
 };
 
 #endif
